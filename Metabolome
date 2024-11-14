@@ -1,0 +1,395 @@
+##############################################################Mfuzz
+library(Mfuzz)
+setwd("/Users/mac/Desktop/dengshan/Lipidomics/cluster/")
+
+#该示例中，行为代谢物，列为分组样本（若存在生物学重复需提前取均值）
+meta <- read.delim('ALL.txt', row.names = 1, check.names = FALSE)
+#meta <- log(meta,2) #log2转换
+#scaled_meta <- as.data.frame(scale(t(meta)))#Z-score缩放
+#scaled_meta <- t(scaled_meta)
+meta <- as.matrix(meta)
+
+#构建对象
+mfuzz_class <- new('ExpressionSet',exprs = meta)
+
+#预处理缺失值或者异常值
+mfuzz_class <- filter.NA(mfuzz_class, thres = 0.25)
+mfuzz_class <- fill.NA(mfuzz_class, mode = 'mean')
+mfuzz_class <- filter.std(mfuzz_class, min.std = 0)
+
+#标准化数据
+mfuzz_class <- standardise(mfuzz_class)
+
+#NbClust/vegan包的最佳聚类数量评估
+library(factoextra)
+fviz_nbclust(meta, kmeans, method = "wss")
+
+library(NbClust)
+nc <- NbClust(meta, distance = 'euclidean', min.nc = 2, max.nc = 20, method = 'kmeans', 
+              index = 'hubert')
+library(vegan)
+cc <- cascadeKM(meta, inf.gr = 2, sup.gr = 20, iter = 100, criterion = 'ssi')
+
+#需要设定随机数种子，以避免再次运行时获得不同的结果
+set.seed(123)
+cluster_num <- 4
+mfuzz_cluster <- mfuzz(mfuzz_class, c = cluster_num, m = mestimate(mfuzz_class))
+
+#作图
+pdf("mfuzz.cluster_new_4.pdf",width=8, height=4) 
+mfuzz.plot2(mfuzz_class, cl = mfuzz_cluster, mfrow = c(2, 5), time.labels = colnames(meta),
+           xlab = "Group", ylab = "Expression changes",x11 = FALSE,colo = "fancy")
+dev.off()
+
+#查看每个聚类群中各自包含代谢物数量
+cluster_size <- mfuzz_cluster$size
+names(cluster_size) <- 1:cluster_num
+cluster_size
+
+#查看每个代谢物所属的聚类群
+head(mfuzz_cluster$cluster)
+
+#Mfuzz通过计算一个叫 membership 的统计量判断代谢物所属的聚类群，以最大的 membership 值为准
+#查看各代谢物的 membership 值
+head(mfuzz_cluster$membership)
+
+#提取所有代谢物所属的聚类群，并和它们的原始表达值整合在一起
+metabolites_cluster <- mfuzz_cluster$cluster
+metabolites_cluster <- cbind(meta[names(metabolites_cluster), ], metabolites_cluster)
+head(metabolites_cluster)
+write.table(metabolites_cluster, 'sum_cluster4.txt', sep = '\t', col.names = NA, quote = FALSE)
+
+#如果提取数据分析过程中标准化后的表达值（绘制曲线图用的那个值，而非原始蛋白表达值）
+metabolites_cluster <- mfuzz_cluster$cluster
+metabolites_standard <- mfuzz_class@assayData$exprs
+metabolites_standard_cluster <- cbind(metabolites_standard[names(metabolites_cluster), ], metabolites_cluster)
+head(metabolites_standard_cluster)
+write.table(metabolites_standard_cluster, 'Lipidomics_standard_cluster5.txt', sep = '\t', col.names = NA, quote = FALSE)
+
+##############################################################圈图
+setwd("/Users/mac/Desktop/dengshan/Lipidomics/圈图")
+
+data <- read.table("all.txt",header = T,sep = "\t",check.names = F)
+#data$group <- factor(data$group,levels= c("Metablolisms","Complex Lipids"))
+library(ggpubr)
+p <- ggdonutchart(data, "Cluster1",
+                  label = "group",                               
+                  fill = "group",                            
+                  color = "white",
+                  title = "Cluster1",
+                  palette = c('#E5D2DD', '#C1E6F3', '#91D0BE', '#F1BB72', '#F3B1A0', '#D6E7A3', 
+                              '#57C3F3', '#E95C59', '#6778AE', '#E0D4CA', 
+                              '#4F8ED8', '#d3d1e3')
+                  #palette = c('#3A6963', '#E39A35', '#476D87')
+                  )
+p
+ggsave("/Users/mac/Desktop/Cluster1.pdf",p,width=5,height=5)
+
+
+##############################################################variable importance in projection (VIP) scores分析
+#一种用于评估多元统计分析中变量重要性的方法，可以帮助我们确定哪些变量对于解释预测变量最为重要
+#PLS-DA(偏最小二乘法判别分析)多组筛选差异变量(VIP)
+
+library(mixOmics)
+library(ropls)
+setwd("/Users/mac/Desktop/dengshan/Lipidomics/PLSDA")
+data <- as.matrix(read.table("ALL.txt", sep="\t", header=T,row.names = 1,check.names=FALSE))
+meta <- as.factor(c(rep(c("D01"),11),rep(c("D04"),11),rep(c("D09"),11),rep(c("D11"),11),rep(c("D16"),11)))
+
+data.plsda <- plsda(data, meta, ncomp = 10)
+
+pdf("PLS−DA.pdf", width = 6, height = 6)
+plotIndiv(data.plsda , comp = 1:2,
+          group = meta, ind.names = FALSE, 
+          ellipse = TRUE, legend = TRUE, title = 'PLS-DA')
+dev.off()
+
+# with background
+pdf("Maximum distance.pdf", width = 6, height = 6)
+background = background.predict(data.plsda, comp.predicted=2, dist = "max.dist") 
+plotIndiv(data.plsda, comp = 1:2,
+          group = meta, ind.names = FALSE, title = "Maximum distance",
+          legend = TRUE,  background = background)
+dev.off()
+
+#VIP 值帮助寻找重要的代谢物
+vip <- vip(data.plsda)
+vip <- vip[,1]
+vip_select <- vip[vip > 1]    #通常以VIP值>1作为筛选标准
+head(vip_select)
+
+vip_select <- as.data.frame(vip_select)
+names(vip_select)[1] <- 'VIP'
+vip_select <- arrange(vip_select, desc(VIP))
+head(vip_select)
+
+top <- head(vip_select, 20)
+top$name = rownames(top)
+top$name <- factor(top$name,levels = rev(top$name))
+
+p <- ggplot(top,aes(x=VIP,y=name))+
+  geom_point(size=3,color="red")+
+  theme_bw()+
+  ylab("")+
+  xlab("VIP Score")+
+  labs(title = "All Groups")+
+  theme(plot.title = element_text(hjust=0.5))
+
+p
+ggsave("VIP.pdf",p,width = 5,height = 5)
+
+
+##############################################################双向叠加柱状图
+library(ggplot2)
+library(reshape2)
+library(hrbrthemes)
+library(viridis)
+
+setwd("/Users/mac/Desktop/dengshan/Lipidomics/差异脂质/")
+
+df <- read.table("cs.txt", sep="\t", header=T)
+#df$group <- factor(df$group,levels = c("D04","D09","D11","D16"))
+p <- ggplot(df, aes(fill = class, y=value, x=group)) +
+  geom_bar(position="identity", stat="identity",width=0.6) + 
+  scale_fill_manual(values = c( 'red'))+
+  labs(x="Group",y="Count",title="Metabolites") + ylim(0,220)+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(angle = 45, hjust = 1)) 
+p
+setwd("/Users/mac/Desktop/")
+ggsave("up.pdf",p , height = 5, width = 5)
+
+########
+setwd("/Users/mac/Desktop/")
+df <- read.table("cs.txt", sep="\t", header=T)
+df <- df[order(df$value, decreasing = TRUE), ]  # 按照表达量从高到低排序
+df$HALLMARK_HYPOXIA <- factor(df$HALLMARK_HYPOXIA,levels = c(df$HALLMARK_HYPOXIA))
+p <- ggplot(df, aes(x = HALLMARK_HYPOXIA, y = value, fill = value)) +geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "#78BBE2", high = "#DEA1A5") +
+  labs(x="",y="HALLMARK_HYPOXIA") +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))  # 旋转x轴标签，使其垂直显示
+p
+ggsave("HALLMARK_HYPOXIA_cell.pdf",p , height = 3, width = 6)
+
+##############################################################脂质热图
+library(pheatmap)
+setwd('/Users/mac/Desktop/dengshan/Lipidomics/热图')
+data <- as.matrix(read.table("ALL1.txt",row.names = 1,header = T,sep = "\t",check.names = F))
+#构建行注释信息
+annotation_row = data.frame(cluster = factor(c(rep("Cluster 1",3),rep("Cluster 2",0),rep("Cluster 3",0),
+                                               rep("Cluster 4",1))))
+rownames(annotation_row) = rownames(data)
+ann_colors = list(cluster = c("Cluster 1" = "#53A85F","Cluster 2" = "#EE934F",
+                              "Cluster 3"="#BB2F29","Cluster 4"="#A7C8DF"))
+
+#pvalue <- as.matrix(read.table("ALL2.txt",row.names = 1,header = T,sep = "\t",check.names = F))
+
+p <- pheatmap(data,
+              # 去掉聚类树：
+              cluster_cols = F,
+              cluster_rows = T,
+              breaks=seq(-1.5,1.5,length.out = 100),
+              # 行注释信息：
+              annotation_row = annotation_row,
+              # color bar 颜色设定：
+              annotation_colors = ann_colors,
+              #display_numbers = ifelse(pvalue > 0.01 & pvalue < 0.05, "*", ifelse(pvalue > 0.001 & pvalue < 0.01, "**", (ifelse(pvalue < 0.001, "***", "")))),
+              #number_color = "black",
+              fontsize=7,
+              # 设置单元格颜色渐变；(5)表示分5段渐变；
+              #color = colorRampPalette(c("#394A89","#7778A7","#FEFEFE","#D36B67","#AD3A36"))(100),
+              color = colorRampPalette(c("#78BBE2","white","#DEA1A5"))(100), 
+              # 行、列标签的字体大小
+              fontsize_col = 8,
+              fontsize_row = 8,
+              # 是否显示行、列名
+              show_colnames = T,
+              # 设置每个单元格的宽度和高度
+              cellwidth = 15, 
+              cellheight = 12,
+              # 设置标题：
+              main = "PS",
+              # 设置标签是否显示
+              annotation_legend	= T,
+              scale="row",
+              border=T) 
+#border= T)
+p
+ggsave("Acyl.pdf",p,width=5,height=5,limitsize = FALSE)
+
+##############################################################检验
+setwd('/Users/mac/Desktop/dengshan/Lipidomics/热图')
+data <- as.data.frame(read.table("ALL1.txt",header = T,sep = "\t",row.names = 1,check.names = F))
+data1 <- data[1:11,]
+data2 <- data[45:55,]
+
+p_values <- data.frame()
+
+for (i in 2:length(colnames(data))) {
+  ks_test <- wilcox.test(data1[, i], data2[, i], alternative = "two.sided",paired = T)#,p.adjust.method="BH")
+  p_values[i,"name"]  <- colnames(data)[i]
+  p_values[i,"p.value"] <- ks_test$p.value
+}
+
+
+write.csv(p_values,"/Users/mac/Desktop/p_values_1_vs_5.csv")
+
+#计算平均值
+setwd('/Users/mac/Desktop/dengshan/Lipidomics/热图')
+data <- as.data.frame(read.table("ALL.txt",header = T,sep = "\t",row.names = 1,check.names = F))
+new_data <- na.omit(data)
+
+library(dplyr)
+result <- new_data %>%
+  group_by(class) %>%
+  summarize(avg_pvalue = mean(p.value),
+            avg_padjust = mean(adjusted_p_values))
+
+write.csv(result,"/Users/mac/Desktop/p_values_1_vs_5.csv")
+
+
+##############################################################气泡图
+setwd('/Users/mac/Desktop/dengshan/Lipidomics/热图')
+data <- as.data.frame(read.table("ALL1.txt",header = T,sep = "\t"))
+data$value <- scale(data$value)
+
+data$BHP <- -log(data$pvalue,10)
+
+#data$class <- factor(data$class,levels = c("TAG","SM","PS","PI","PG","PE","PC","LPE",'LPC',"DAG","Cer"))
+data$class <- factor(data$class,levels = c("TAG","LPC","PE","PC","PI","LPE","Cer","SM","PS","DAG","PG"))
+data$group <- factor(data$group,levels = c("D4","D9","D11","D16"))
+# 画散点图
+p = ggplot(data,aes(group,class),label_format=200)
+# 将数据点在大小、形状、颜色三个维度进行分组
+p = p + geom_point(aes(size=BHP,fill= value),shape = 21,stroke = 0.5)
+# 将颜色区间设置为绿色到红色
+p = p + scale_fill_gradientn(colours = c("#394A89","#7778A7","#FEFEFE","#D36B67","#AD3A36"))
+# 设置标记信息
+p = p + labs(color="Z-Score",size="BH (-log10)",title="Lipids")
+# 图例右侧排列
+p = p + theme(legend.position = "right") 
+# 设置绘图主题
+p = p + theme_bw() 
+# 去除主题中的网格线
+p = p + theme(panel.grid=element_blank()) 
+# 设置标题居中
+p = p + theme(plot.title = element_text(hjust = 0.5),
+              axis.text.x = element_text(angle = 0, hjust = 0.5)) 
+# 设置图例形状大小和图例排列顺序
+p = p + guides(shape = guide_legend(override.aes = list(size = 5)),color = guide_colorbar(order = 1),
+               fill = guide_legend(order = 0)) 
+# 调整长宽比例（坐标大小比例）
+#p + coord_fixed(ratio= 0.25 ) 
+p
+ggsave("BH2.pdf", p, width=3.2, height=5, limitsize = FALSE)
+
+##############################################################差异代谢物
+setwd('/Users/mac/Desktop/')
+data <- as.data.frame(read.table("cs.txt",header = T,sep = "\t",check.names = F,row.names = 1))
+
+# 执行T检验
+test_results <- list()
+
+for (i in 2:5) {
+  group1 <- data[data$group == "g1", ]
+  group2 <- data[data$group == paste0("g", i), ]
+  group1 <- group1[,-1]
+  group2 <- group2[,-1]
+  # sapply进行列循环计算
+  test_result = sapply(1:ncol(group1), function(i) {
+    wilcox.test(group1[,i], group2[,i],paired = T)$p.value
+  })
+  adjusted_p_values <- p.adjust(test_result, method = "BH")
+  test_results[[paste0("g", i)]] <- adjusted_p_values
+}
+
+test_results <- t(as.data.frame(test_results))
+colnames(test_results) <- colnames(group1)
+write.csv(test_results,"/Users/mac/Desktop/wilcox.csv")
+
+logical_matrix <- test_results > 0.05
+count_greater_than_0.05 <- colSums(logical_matrix)
+filtered_df <- test_results[,count_greater_than_0.05 != 4]
+
+write.csv(filtered_df,"/Users/mac/Desktop/wilcox.csv")
+
+#正态性检验
+df <- data[,-1]
+normality_test_results <- vector("list", ncol(df))
+for (i in 1:ncol(df)) {
+  normality_test_results[[i]] <- shapiro.test(df[, i])
+}
+for (i in 1:length(normality_test_results)) {
+  print(normality_test_results[[i]])
+}
+#如果p值小于0.05,即代谢物不服从正态分布
+
+#LF筛选 FC>1.25 / FC <0.8
+setwd('/Users/mac/Desktop/')
+data <- as.data.frame(read.table("cs.txt",header = T,sep = "\t",check.names = F,row.names = 1))
+
+logical_matrix <- data < 1.25 & data > 0.8
+count_greater_than_0.05 <- rowSums(logical_matrix)
+filtered_df <- data[count_greater_than_0.05 != 4,]
+
+write.csv(filtered_df,"/Users/mac/Desktop/FC.csv")
+
+
+##匹配FDR和FC
+setwd('/Users/mac/Desktop/')
+FDR <- as.data.frame(read.table("cs.txt",header = T,sep = "\t",check.names = F,row.names = 1))
+FC <- as.data.frame(read.table("cs2.txt",header = T,sep = "\t",check.names = F,row.names = 1))
+merged_df <- merge(FDR, FC, by = "row.names", all = TRUE)
+merged_df <- na.omit(merged_df)
+write.csv(merged_df,"/Users/mac/Desktop/all.csv")
+
+##############################################################TAG合并
+setwd('/Users/mac/Desktop')
+data <- as.data.frame(read.table("cs.txt",header = T,sep = "\t"))
+
+########TAG气泡图
+
+# 画散点图
+data$cluster <- as.factor(data$cluster)
+p = ggplot(data,aes(Carbons,Unsaturations))
+# 将数据点在大小、形状、颜色三个维度进行分组
+p = p + geom_point(aes(size=Value,fill=cluster),shape = 21,stroke = 0.5)
+# 将颜色区间设置为绿色到红色
+p = p + scale_fill_manual(values = c("2"="#FEFEFE","4"="#D36B67"))
+# 设置标记信息
+p = p + labs(color="Cluster",size="TAG concentrate",title="Lipids")
+# 图例右侧排列
+p = p + theme(legend.position = "right") 
+# 设置绘图主题
+p = p + theme_bw() 
+# 去除主题中的网格线
+p = p + theme(panel.grid=element_blank()) 
+# 设置标题居中
+p = p + theme(plot.title = element_text(hjust = 0.5),
+              axis.text.x = element_text(angle = 0, hjust = 0.5)) 
+# 设置图例形状大小和图例排列顺序
+p = p + guides(shape = guide_legend(override.aes = list(size = 5)),color = guide_colorbar(order = 1),
+               fill = guide_legend(order = 0)) 
+# 调整长宽比例（坐标大小比例）
+#p + coord_fixed(ratio= 0.25 ) 
+p
+ggsave("TAG.pdf", p, width=5.5, height=4.5, limitsize = FALSE)
+
+
+c1 <- c(48,50,51,52,52,54,54,56,56,56,58,58)
+c2 <- c(49,49,50,51,51,51,51,60)
+
+data<-c(c1,c2)
+a <- factor(c(rep(2,12),rep(4,8)))
+my_data <- data.frame(data,a)
+###Shapiro-Wilk正态性检验
+shapiro.test(my_data$data[my_data$a == "2"])
+#p-value = 0.4544
+shapiro.test(my_data$data[my_data$a == "4"])
+#p-value = 0.5992  两组数据均符合正态分布
+###方差齐性检验
+var.test(data ~ a, data = my_data)
+##p-value = 0.5148>0.05，因此认为两组数据的方差之间没有显著差异（方差齐性）
+t.test(data ~ a, data = my_data, var.equal = TRUE)
+###方差不齐时使用Welch检验，var.equal = FALSE
+wilcox.test(data ~ a, data = my_data, alternative = "two.sided")
