@@ -1,0 +1,840 @@
+##############################################################MetaboAnalystR分析
+library("MetaboAnalystR")
+
+###########Statistical Analysis [one factor]
+
+####差异代谢物 FC=1.25 FDR<0.05
+setwd("/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Statistical Analysis/差异代谢物/g1_vs_g5")
+
+mSet<-InitDataObjects("conc", "stat", FALSE)
+mSet<-Read.TextData(mSet, "/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Statistical Analysis/差异代谢物/g1_vs_g5/all.txt", 
+                    "rowp", "disc")
+mSet<-SanityCheckData(mSet)
+mSet<-ReplaceMin(mSet)
+mSet<-SanityCheckData(mSet)
+mSet<-FilterVariable(mSet, "none", -1, "F", 25, F)
+mSet<-PreparePrenormData(mSet)
+mSet<-Normalization(mSet, "SumNorm", "NULL", "AutoNorm", ratio=FALSE, ratioNum=20)
+mSet<-PlotNormSummary(mSet, "norm_", "pdf", 72, width=NA)
+mSet<-PlotSampleNormSummary(mSet, "snorm_", "pdf", 72, width=NA)
+mSet<-FC.Anal(mSet, 1.25, 1, FALSE)
+mSet<-PlotFC(mSet, "fc_", "pdf", 72, width=NA)
+mSet<-Ttests.Anal(mSet, F, 0.05, FALSE, TRUE, "fdr", FALSE)
+mSet<-PlotTT(mSet, "tt_", "pdf", 72, width=NA)
+mSet<-Volcano.Anal(mSet, FALSE, 1.25, 1, F, 0.05, TRUE, "fdr")
+mSet<-PlotVolcano(mSet, "volcano_",1, 0, "pdf", 72, width=NA)
+
+####ANOVA方差分析 FDR<0.05
+setwd("/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Statistical Analysis/ANOVA方差分析")
+
+mSet<-InitDataObjects("conc", "stat", FALSE)
+mSet<-Read.TextData(mSet, "/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Statistical Analysis/ANOVA方差分析/all.txt", 
+                    "rowp", "disc")
+mSet<-SanityCheckData(mSet)
+mSet<-ReplaceMin(mSet)
+mSet<-SanityCheckData(mSet)
+mSet<-FilterVariable(mSet, "none", -1, "F", 25, F)
+mSet<-PreparePrenormData(mSet)
+mSet<-Normalization(mSet, "MedianNorm", "NULL", "AutoNorm", ratio=FALSE, ratioNum=20)
+mSet<-PlotNormSummary(mSet, "norm_", "pdf", 72, width=NA)
+mSet<-PlotSampleNormSummary(mSet, "snorm_", "pdf", 72, width=NA)
+mSet<-ANOVA.Anal(mSet, F, 0.05, FALSE)
+mSet<-PlotANOVA(mSet, "aov_", "pdf", 72, width=NA)
+#mSet<-Calculate.ANOVA.posthoc(mSet, "fisher", 0.05)
+#mSet<-PlotCorrHeatMap(mSet, "corr_", "pdf", 72, width=NA, "col", "pearson", "bwm", "overview", T, F, 0.0)
+
+####PCA分析
+setwd("/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Statistical Analysis/PCA分析")
+
+mSet<-InitDataObjects("conc", "stat", FALSE)
+mSet<-Read.TextData(mSet, "/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Statistical Analysis/PCA分析/all.txt", 
+                    "rowp", "disc")
+mSet<-SanityCheckData(mSet)
+mSet<-ReplaceMin(mSet)
+mSet<-SanityCheckData(mSet)
+mSet<-FilterVariable(mSet, "none", -1, "F", 25, F)
+mSet<-PreparePrenormData(mSet)
+mSet<-Normalization(mSet, "SumNorm", "NULL", "AutoNorm", ratio=FALSE, ratioNum=20)
+mSet<-PlotNormSummary(mSet, "norm_", "pdf", 72, width=NA)
+mSet<-PlotSampleNormSummary(mSet, "snorm_", "pdf", 72, width=NA)
+mSet<-PCA.Anal(mSet)
+mSet<-PlotPCAPairSummary(mSet, "pca_pair_", "pdf", 72, width=NA, 5)
+mSet<-PlotPCAScree(mSet, "pca_scree_", "pdf", 72, width=NA, 5)
+mSet<-PlotPCA2DScore(mSet, "pca_score2d_", "pdf", 72, width=NA, 1,2,0.95,0,0)
+mSet<-PlotPCALoading(mSet, "pca_loading_", "pdf", 72, width=NA, 1,2);
+mSet<-PlotPCABiplot(mSet, "pca_biplot_", "pdf", 72, width=NA, 1,2)
+#mSet<-PlotPCA3DLoading(mSet, "pca_loading3d_", "json", 1,2,3)
+
+####PLS-DA分析
+setwd("/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Statistical Analysis/PLS-DA分析/all")
+
+mSet<-InitDataObjects("conc", "stat", FALSE)
+mSet<-Read.TextData(mSet, "/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Statistical Analysis/PLS-DA分析/all/all.txt", 
+                    "rowp", "disc")
+mSet<-SanityCheckData(mSet)
+mSet<-ReplaceMin(mSet)
+mSet<-SanityCheckData(mSet)
+mSet<-FilterVariable(mSet, "iqr", 10, "F", 25, F)
+mSet<-PreparePrenormData(mSet)
+mSet<-Normalization(mSet, "MedianNorm", "NULL", "AutoNorm", ratio=FALSE, ratioNum=20)
+mSet<-PlotNormSummary(mSet, "norm_", "pdf", 72, width=NA)
+mSet<-PlotSampleNormSummary(mSet, "snorm_", "pdf", 72, width=NA)
+mSet<-PLSR.Anal(mSet, reg=TRUE)
+mSet<-PlotPLSPairSummary(mSet, "pls_pair_", "pdf", 72, width=NA, 5)
+mSet<-PlotPLS2DScore(mSet, "pls_score2d_", "pdf", 72, width=NA, 1,2,0.95,0,0)
+mSet<-PlotPLS3DScoreImg(mSet, "pls_score3d_", "pdf", 72, width=NA, 1,2,3, 40)
+mSet<-PlotPLSLoading(mSet, "pls_loading_", "pdf", 72, width=NA, 1, 2);
+#mSet<-PlotPLS3DLoading(mSet, "pls_loading3d_0_", "json", 1,2,3)
+mSet<-PlotPLS.Imp(mSet, "pls_imp_", "pdf", 72, width=NA, "vip", "Comp. 1", 20,FALSE)
+
+###########Pathway Analysis FC=1.25 FDR<0.05
+setwd("/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Pathway Analysis/差异代谢物通路富集/g1_vs_g2/down/")
+
+mSet<-InitDataObjects("conc", "pathqea", FALSE)
+mSet<-Read.TextData(mSet, "/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Pathway Analysis/差异代谢物通路富集/g1_vs_g2/down/down.txt",
+                    "rowu", "disc")
+mSet<-SanityCheckData(mSet)
+mSet<-ReplaceMin(mSet)
+mSet<-CrossReferencing(mSet, "name")
+mSet<-CreateMappingResultTable(mSet)
+mSet<-PreparePrenormData(mSet)
+mSet<-Normalization(mSet, "NULL", "NULL", "MeanCenter", ratio=FALSE, ratioNum=20)
+mSet<-PlotNormSummary(mSet, "norm_0_", "pdf", 72, width=NA)
+mSet<-PlotSampleNormSummary(mSet, "snorm_0_", "pdf", 72, width=NA)
+mSet<-SetKEGG.PathLib(mSet, "hsa", "current")
+mSet<-SetMetabolomeFilter(mSet, F)
+mSet<-CalculateQeaScore(mSet, "rbc", "gt")
+mSet<-PlotPathSummary(mSet, T, "path_view_", "pdf", 72, width=NA,xlim=0.25,ylim=5.5)
+mSet<-SaveTransformedData(mSet)
+
+
+##气泡图
+library(ggplot2)
+# 设置工作路径
+setwd("/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Pathway Analysis/差异代谢物通路富集/plot")
+
+#加载数据
+data <- as.data.frame(read.table("pathway.txt",header = T,sep = "\t",check.names=FALSE))
+data$id <- as.factor(data$id)
+# 画散点图
+p = ggplot(data,aes(Group,id),label_format=200)
+# 将数据点在大小、形状、颜色三个维度进行分组
+p = p + geom_point(aes(size=Impact,color= -1*log10(FDR)))
+#shape = factor(group)
+# 将颜色区间设置为绿色到红色
+p = p + scale_colour_gradient(low="red",high="red4") 
+# 设置标记信息
+p = p + labs(color=expression(-log[10](FDR)),size="Impact",x="Group",y=" ",
+             title="Downregulated Pathways")
+# 图例右侧排列
+p = p + theme(legend.position = "right") 
+# 设置绘图主题
+p = p + theme_bw() 
+# 去除主题中的网格线
+p = p + theme(panel.grid=element_blank()) 
+# 设置标题居中
+p = p + theme(plot.title = element_text(hjust = 0.5),
+              axis.text.x = element_text(angle = 45, hjust = 1)) 
+# 设置图例形状大小和图例排列顺序
+p = p + guides(shape = guide_legend(override.aes = list(size = 5)),color = guide_colorbar(order = 1),
+               fill = guide_legend(order = 0)) 
+# 调整长宽比例（坐标大小比例）
+#p + coord_fixed(ratio= 0.25 ) 
+p
+ggsave("Pathway Analysis down.pdf", p, width=7, height=4, limitsize = FALSE)
+
+###########Pathway Analysis Cluster1-6
+
+setwd("/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Pathway Analysis/聚类通路富集/Cluster1/")
+
+data <- read.delim('all.txt', row.names = 1, check.names = FALSE)
+data <- as.matrix(data)
+a <- read.table("a.txt", sep="\t", header=T,check.names=FALSE)
+a <- as.character(a[,1])
+data_extracted <- data[, a]
+write.csv(data_extracted,"data_extracted.csv")
+
+mSet<-InitDataObjects("conc", "pathqea", FALSE)
+mSet<-Read.TextData(mSet, "/Users/mac/Desktop/dengshan/Metabolites/MetaboAnalystR/Pathway Analysis/聚类通路富集/Cluster1/down.txt",
+                    "rowp", "disc")
+mSet<-SanityCheckData(mSet)
+mSet<-ReplaceMin(mSet)
+mSet<-CrossReferencing(mSet, "name")
+mSet<-CreateMappingResultTable(mSet)
+mSet<-PreparePrenormData(mSet)
+mSet<-Normalization(mSet, "SumNorm", "LogNorm", "MeanCenter", ratio=FALSE, ratioNum=20)
+mSet<-PlotNormSummary(mSet, "norm_0_", "pdf", 72, width=NA)
+mSet<-PlotSampleNormSummary(mSet, "snorm_0_", "pdf", 72, width=NA)
+mSet<-SetKEGG.PathLib(mSet, "hsa", "current")
+mSet<-SetMetabolomeFilter(mSet, F)
+mSet<-CalculateQeaScore(mSet, "rbc", "gt")
+mSet<-PlotPathSummary(mSet, T, "path_view_", "pdf", 72, width=NA, NA, NA )
+mSet<-SaveTransformedData(mSet)
+
+
+
+
+##############################################################variable importance in projection (VIP) scores分析
+#一种用于评估多元统计分析中变量重要性的方法，可以帮助我们确定哪些变量对于解释预测变量最为重要
+#OPLS-DA(正交偏最小二乘判别分析)两组筛选差异变量(VIP)
+
+library(mixOmics)
+library(ropls)
+setwd("/Users/mac/Desktop/dengshan/Metabolites/VIP score/g1_vs_g5")
+data <- read.table("data.txt", sep="\t", header=T,row.names = 1,check.names=FALSE)
+meta <- read.table("metadata.txt", sep="\t", header=T,row.names = 1)
+
+groupFc = meta[, "group"]
+
+# 通过orthoI指定正交组分数目
+# orthoI = NA时，执行OPLS，并通过交叉验证自动计算适合的正交组分数
+pdf("plot.pdf", width = 6, height = 6)
+oplsda = opls(data, groupFc, predI = 1, orthoI = NA)
+dev.off()
+#R2X和R2Y分别表示所建模型对X和Y矩阵的解释率
+#Q2表示模型的预测能力，值越接近于1表明模型的拟合度越好，训练集的样本越能够被准确划分到其原始归属中
+
+#可视化
+library(ggplot2)
+library(ggsci)
+library(tidyverse)
+#提取样本在 OPLS-DA 轴上的位置
+sample.score = oplsda@scoreMN %>%  #得分矩阵
+  as.data.frame() %>%
+  mutate(group = meta[["group"]],
+         o1 = oplsda@orthoScoreMN[,1]) #正交矩阵
+head(sample.score)#查看
+
+p <- ggplot(sample.score, aes(p1, o1, color = group)) +
+  geom_hline(yintercept = 0, linetype = 'dashed', size = 0.5) + #横向虚线
+  geom_vline(xintercept = 0, linetype = 'dashed', size = 0.5) +
+  geom_point() +
+  #geom_point(aes(-10,-10), color = 'white') +
+  labs(x = 'P1(5.0%)',y = 'to1') +
+  stat_ellipse(level = 0.95, linetype = 'solid', 
+               size = 1, show.legend = F) + #添加置信区间
+  scale_color_manual(values = c('#008000','#FFA74F')) +
+  theme_bw() +
+  theme(legend.position = c(0.4,0.9),
+        legend.title = element_blank(),
+        legend.text = element_text(color = 'black',size = 12),
+        panel.background = element_blank(),
+        panel.grid = element_blank(),
+        axis.text = element_text(color = 'black',size = 15),
+        axis.title = element_text(color = 'black',size = 15),
+        axis.ticks = element_line(color = 'black'))
+p
+ggsave("OPLS-DA.pdf", plot=p, width = 5,height = 5)
+
+#VIP 值帮助寻找重要的代谢物
+vip <- getVipVn(oplsda)
+vip_select <- vip[vip > 1]    #通常以VIP值>1作为筛选标准
+head(vip_select)
+vip_select <- as.data.frame(vip_select)
+names(vip_select)[1] <- 'VIP'
+vip_select <- arrange(vip_select, desc(VIP))
+head(vip_select)
+
+top <- head(vip_select, 20)
+top$name = rownames(top)
+top$name <- factor(top$name,levels = rev(top$name))
+
+p <- ggplot(top,aes(x=VIP,y=name))+
+  geom_point(size=3,color="red")+
+  theme_bw()+
+  ylab("")+
+  xlab("VIP Score")+
+  labs(title = "g1 vs g5")+
+  theme(plot.title = element_text(hjust=0.5))
+
+p
+ggsave("VIP.pdf",p,width = 5,height = 5)
+
+##############################################################variable importance in projection (VIP) scores分析
+#一种用于评估多元统计分析中变量重要性的方法，可以帮助我们确定哪些变量对于解释预测变量最为重要
+#PLS-DA(偏最小二乘法判别分析)多组筛选差异变量(VIP)
+
+library(mixOmics)
+library(ropls)
+setwd("/Users/mac/Desktop/dengshan/Metabolites/VIP score/ALL")
+data <- as.matrix(read.table("data.txt", sep="\t", header=T,row.names = 1,check.names=FALSE))
+meta <- as.factor(c(rep(c("g1"),11),rep(c("g2"),11),rep(c("g3"),11),rep(c("g4"),11),rep(c("g5"),11)))
+
+data.plsda <- plsda(data, meta, ncomp = 10)
+
+pdf("PLS−DA.pdf", width = 6, height = 6)
+plotIndiv(data.plsda , comp = 1:2,
+          group = meta, ind.names = FALSE, 
+          ellipse = TRUE, legend = TRUE, title = 'PLS-DA')
+dev.off()
+
+# with background
+pdf("Maximum distance.pdf", width = 6, height = 6)
+background = background.predict(data.plsda, comp.predicted=2, dist = "max.dist") 
+plotIndiv(data.plsda, comp = 1:2,
+          group = meta, ind.names = FALSE, title = "Maximum distance",
+          legend = TRUE,  background = background)
+dev.off()
+
+#VIP 值帮助寻找重要的代谢物
+vip <- vip(data.plsda)
+vip <- vip[,1]
+vip_select <- vip[vip > 1]    #通常以VIP值>1作为筛选标准
+head(vip_select)
+
+vip_select <- as.data.frame(vip_select)
+names(vip_select)[1] <- 'VIP'
+vip_select <- arrange(vip_select, desc(VIP))
+head(vip_select)
+
+top <- head(vip_select, 20)
+top$name = rownames(top)
+top$name <- factor(top$name,levels = rev(top$name))
+
+p <- ggplot(top,aes(x=VIP,y=name))+
+  geom_point(size=3,color="red")+
+  theme_bw()+
+  ylab("")+
+  xlab("VIP Score")+
+  labs(title = "All Groups")+
+  theme(plot.title = element_text(hjust=0.5))
+
+p
+ggsave("VIP.pdf",p,width = 5,height = 5)
+
+
+##############################################################Mfuzz
+library(Mfuzz)
+setwd("/Users/mac/Desktop/dengshan/Metabolites/cluster")
+
+#该示例中，行为代谢物，列为分组样本（若存在生物学重复需提前取均值）
+meta <- read.delim('metabolites.txt', row.names = 1, check.names = FALSE)
+meta <- as.matrix(meta)
+
+#构建对象
+mfuzz_class <- new('ExpressionSet',exprs = meta)
+
+#预处理缺失值或者异常值
+mfuzz_class <- filter.NA(mfuzz_class, thres = 0.25)
+mfuzz_class <- fill.NA(mfuzz_class, mode = 'mean')
+mfuzz_class <- filter.std(mfuzz_class, min.std = 0)
+
+#标准化数据
+mfuzz_class <- standardise(mfuzz_class)
+
+#NbClust/vegan包的最佳聚类数量评估
+library(NbClust)
+nc <- NbClust(meta, distance = 'euclidean', min.nc = 2, max.nc = 20, method = 'kmeans', 
+              index = 'hubert')
+plot(nc)
+library(vegan)
+cc <- cascadeKM(meta, inf.gr = 2, sup.gr = 20, iter = 100, criterion = 'ssi')
+plot(cc)
+
+#需要设定随机数种子，以避免再次运行时获得不同的结果
+set.seed(123)
+cluster_num <- 6
+mfuzz_cluster <- mfuzz(mfuzz_class, c = cluster_num, m = mestimate(mfuzz_class))
+
+#作图
+setwd("/Users/mac/Desktop/dengshan/Metabolites/cluster")
+pdf("mfuzz.cluster_6.pdf",width=8, height=4) 
+mfuzz.plot2(mfuzz_class, cl = mfuzz_cluster, mfrow = c(2, 5), time.labels = colnames(meta),
+           xlab = "Group", ylab = "Expression changes",x11 = FALSE)
+dev.off()
+
+#查看每个聚类群中各自包含代谢物数量
+cluster_size <- mfuzz_cluster$size
+names(cluster_size) <- 1:cluster_num
+cluster_size
+
+#查看每个代谢物所属的聚类群
+head(mfuzz_cluster$cluster)
+
+#Mfuzz通过计算一个叫 membership 的统计量判断代谢物所属的聚类群，以最大的 membership 值为准
+#查看各代谢物的 membership 值
+head(mfuzz_cluster$membership)
+
+#提取所有代谢物所属的聚类群，并和它们的原始表达值整合在一起
+metabolites_cluster <- mfuzz_cluster$cluster
+metabolites_cluster <- cbind(meta[names(metabolites_cluster), ], metabolites_cluster)
+head(metabolites_cluster)
+setwd("/Users/mac/Desktop/dengshan/Metabolites/cluster")
+write.table(metabolites_cluster, 'metabolites_cluster6.txt', sep = '\t', col.names = NA, quote = FALSE)
+
+#如果提取数据分析过程中标准化后的表达值（绘制曲线图用的那个值，而非原始蛋白表达值）
+metabolites_cluster <- mfuzz_cluster$cluster
+metabolites_standard <- mfuzz_class@assayData$exprs
+metabolites_standard_cluster <- cbind(metabolites_standard[names(metabolites_cluster), ], metabolites_cluster)
+head(metabolites_standard_cluster)
+write.table(metabolites_standard_cluster, 'metabolites_standard_cluster6.txt', sep = '\t', col.names = NA, quote = FALSE)
+
+
+##############################################################PCA分析
+setwd("/Users/mac/Desktop/dengshan/Metabolites/PCA/")
+data <- read.table("all.txt",row.names = 1,header = T,sep = "\t")
+
+# 进行PCA（scale. = TRUE表示分析前对数据进行归一化）
+data.pca <- prcomp(data[,-1], center = TRUE, scale. = TRUE, retx= T) #相关矩阵分解
+
+summary(data.pca) #方差解释度
+data.pca$sdev #特征值的开方
+data.pca$rotation #特征向量，回归系数
+data.pca$x #样本得分score
+
+###图1
+library(ggplot2)
+library(ggrepel)
+
+df1 <- data.pca$x # 提取PC score
+df1 <- as.data.frame(df1) # 注意：如果不转成数据框形式后续绘图时会报错
+
+pca.var <- data.pca$sdev^2  ## sdev是标准偏差，平方是避免负数的干扰
+pca.var.per <- round(pca.var/sum(pca.var)*100, 1)  ##求每个样本的variation
+barplot(pca.var.per, main="Scree Plot", xlab="Principal Component", ylab="Percent Variation")  ##选PC
+
+# 提取主成分的方差贡献率,生成坐标轴标题
+summ1 <- summary(data.pca)
+xlab1 <- paste0("PC1(",round(summ1$importance[2,1]*100,2),"%)")
+ylab1 <- paste0("PC2(",round(summ1$importance[2,2]*100,2),"%)")
+
+# 绘制PCA得分图
+library(ggplot2)
+ggplot(data = df1,aes(x = PC1,y = PC2,color = data$group))+
+  # 绘制置信椭圆：
+  stat_ellipse(level = 0.95, show.legend = F, linetype = 2) +
+  # 绘制散点：
+  geom_point(aes(color = data$group),size = 3.5 ,alpha= 0.8)+
+  scale_color_manual(values = c('#8EE4DC','#4F8ED8','#603BA0', '#DC4B39', '#666666'))+
+  labs(x = xlab1,y = ylab1,color = "Group",title = "Metabolites PCA Scores")+
+  guides(fill = "none")+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5,size = 15),
+        axis.text = element_text(size = 11),axis.title = element_text(size = 13),
+        legend.text = element_text(size = 11),legend.title = element_text(size = 13),
+        plot.margin = unit(c(0.4,0.4,0.4,0.4),'cm'))
+
+setwd("/Users/mac/Desktop/dengshan/Metabolites/PCA")
+ggsave("PCA.pdf",height = 5,width = 5)
+
+#图2
+df1 <- data.pca$x # 提取PC score
+
+tmp <- df1[,c(1,2)]
+tmp <- as.data.frame(tmp)
+tmp$sample <- c(rep(c("v1","v2","v3","v4","v5","v6","v7","v8","v9","v10","v11"),5))
+tmp$group <- c(rep("g1",11),rep("g2",11),rep("g3",11),rep("g4",11),rep("g5",11))
+
+library(ggforce)
+
+p <- ggplot(tmp, aes(group,PC1))+theme_bw()+
+  stat_boxplot(geom ="errorbar",width=0.2)+
+  geom_boxplot(outlier.shape = NA)+
+  geom_boxplot(aes(color=group),fill="white")+
+  #scale_color_manual(values = c('#d3d1e3', '#b3b1d0', '#9490bd', '#7470a9', '#5c5794'))+
+  geom_point(aes(color = sample),size =1.2 ,alpha= 1)+
+  geom_line(aes(group=factor(sample), color= factor(sample)), linewidth = 0.25, linetype = 2)+
+  scale_color_manual(values = c('#d3d1e3', '#b3b1d0', '#9490bd', '#7470a9', '#5c5794',
+                                '#FAE7D1', '#DC4B39','#F6D2A8', '#BB2F29', '#97231F', 
+                                '#F2B276', '#5E0E12',
+                                '#EE934F', '#A7C8DF','#235097', '#3A6FB0'))+
+  stat_compare_means(comparisons = list(c("g1","g2"),c("g1","g3"),c("g1","g4"),c("g1","g5"),
+                                        c("g2","g3"),c("g2","g4"),c("g2","g5"),
+                                        c("g3","g4"),c("g3","g5"),c("g4","g5")),
+                     method="t.test", #(t.test or wilcox.test)
+                     paired = T,
+                     size=2,
+                     symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1),
+                                        symbols = c("****", "***", "**", "*", "ns")))+
+  labs(title = "PC1")+
+  theme(plot.title = element_text(size=10,hjust=0.5))+
+  xlab("group")+ylab("Metabolomics PC1")+
+  theme(legend.position = 'none')
+
+p
+ggsave("PC1.pdf", p, width=3,height=3)
+
+##############################################################相关性气泡图
+library(Hmisc)
+library(dplyr)
+
+setwd("/Users/mac/Desktop/dengshan/Metabolites/Correlation/")
+
+tmp <- as.matrix(read.table("data0.txt", sep="\t", header=T,row.names = 1, check.names=FALSE))
+rownames(tmp) <- paste0(1:55)
+
+# 计算相关性和显著性p值矩阵：
+cor_res <- rcorr(tmp)
+
+cor_mat <- cor_res$r
+p_mat <- cor_res$P
+
+# 数据转换：
+cor_mat_long <- cor_mat %>% 
+  as.data.frame() %>% 
+  mutate(x = factor(rownames(cor_mat), levels = colnames(cor_mat))) %>% 
+  pivot_longer(cols = !x, names_to = "y", values_to = "cor") %>% 
+  mutate(y = factor(y, levels = rev(colnames(cor_mat))))
+
+head(cor_mat_long)
+
+ggplot() +
+  # 气泡图
+  geom_point(data = cor_mat_long, aes(x, y, size = cor, fill = cor), 
+             shape = 21, color = "#c4bcba")+
+  # 配色
+  scale_fill_gradient2(low = "blue", mid = "#ffffff", high = "red")+
+  # x轴和y轴扩展
+  scale_x_discrete(expand = c(0.025, 0.025))+
+  scale_y_discrete(expand = c(0.025, 0.025))+
+  labs(x="Metabolites",y="Metabolites",title="Correlation")+
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, hjust = 1))+
+  # 框线
+  geom_vline(aes(xintercept =seq(0.5, 36.5, 1)), color = "#bbbbbb")+
+  geom_hline(aes(yintercept=seq(0.5, 36.5, 1)), color = "#bbbbbb")+
+  # 主题
+  theme(panel.grid = element_blank())
+
+ggsave("p1.pdf", height = 10, width = 10)
+
+# 取相关性矩阵上三角：
+cor_mat_up <- cor_mat
+cor_mat_up[lower.tri(cor_mat_up, diag = T)] <- NA
+
+cor_mat_up_long <- cor_mat_up %>% 
+  as.data.frame() %>% 
+  mutate(x = factor(rownames(cor_mat_up), levels = rev(colnames(cor_mat)))) %>% 
+  pivot_longer(cols = !x, names_to = "y", values_to = "cor") %>% 
+  mutate(y = factor(y, levels = colnames(cor_mat)))
+
+ggplot() +
+  # 气泡图：
+  geom_point(data = cor_mat_up_long, aes(x, y, size = cor, fill = cor), 
+             shape = 21, color = "#c4bcba")+
+  # 配色
+  scale_fill_gradient2(low = "blue", mid = "#ffffff", high = "red")+
+  # x轴和y轴扩展
+  scale_x_discrete(expand = c(0.025, 0.025))+
+  scale_y_discrete(expand = c(0.025, 0.025))+
+  labs(x="Metabolites",y="Metabolites",title="Correlation")+
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, hjust = 1))+
+  # 框线
+  geom_vline(aes(xintercept =seq(0.5, 36.5, 1)), color = "#bbbbbb")+
+  geom_hline(aes(yintercept=seq(0.5, 36.5, 1)), color = "#bbbbbb")+
+  # 主题
+  theme(panel.grid = element_blank())
+
+ggsave("p2.pdf", height = 10, width = 10)
+
+# 取p值矩阵下三角：
+p_mat_lower <- p_mat
+p_mat_lower[!lower.tri(p_mat_lower, diag = F)] <- 1
+
+p_mat_lower_long <- p_mat_lower %>% 
+  as.data.frame() %>% 
+  mutate(x = factor(rownames(p_mat_lower), levels = rev(colnames(cor_mat)))) %>% 
+  pivot_longer(cols = !x, names_to = "y", values_to = "p") %>% 
+  mutate(y = factor(y, levels = colnames(cor_mat)))
+
+# 显著性标记：
+p_mat_lower_long$p_sig <- as.character(symnum(p_mat_lower_long$p, 
+                                              cutpoints = c(0, 0.001, 0.01, 0.05, 1), 
+                                              symbols = c("***", "**", "*", "")))
+ggplot() +
+  # 气泡图：
+  geom_point(data = p_mat_lower_long, 
+             aes(x, y, color = -log10(p)),
+             size = 10,
+             shape = 15)+
+  geom_text(data = p_mat_lower_long, 
+            aes(x, y, label = p_sig),size=2)+
+  # 配色：
+  scale_color_gradientn(colours = c("#ffffff", "#71bc68", "#c3972e", "#fb7f00"))+
+  # x轴和y轴扩展
+  scale_x_discrete(expand = c(0.025, 0.025))+
+  scale_y_discrete(expand = c(0.025, 0.025))+
+  labs(x="Metabolites",y="Metabolites",title="Correlation")+
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, hjust = 1))+
+  # 框线
+  geom_vline(aes(xintercept =seq(0.5, 36.5, 1)), color = "#bbbbbb")+
+  geom_hline(aes(yintercept=seq(0.5, 36.5, 1)), color = "#bbbbbb")+
+  # 主题
+  theme(panel.grid = element_blank())
+
+ggsave("p3.pdf", height = 15, width = 15)
+
+#合并
+ggplot() +
+  # p值矩阵：
+  geom_point(data = p_mat_lower_long, 
+             aes(x, y, color = -log10(p)),
+             size = 10,
+             shape = 15)+
+  geom_text(data = p_mat_lower_long, 
+            aes(x, y, label = p_sig),size=5)+
+  # 配色：
+  scale_color_gradientn(colours = c("#ffffff", "#71bc68", "#c3972e", "#fb7f00"))+
+  # 气泡图：
+  geom_point(data = cor_mat_up_long, aes(x, y, size = cor, fill = cor), 
+             shape = 21, color = "#c4bcba")+
+  # 配色：
+  scale_fill_gradient2(low = "blue", mid = "#ffffff", high = "red")+
+  # x轴和y轴扩展
+  scale_x_discrete(expand = c(0.025, 0.025))+
+  scale_y_discrete(expand = c(0.025, 0.025), position = "right")+
+  # 框线
+  geom_vline(aes(xintercept =seq(0.5, 36.5, 1)), color = "#bbbbbb")+
+  geom_hline(aes(yintercept=seq(0.5, 36.5, 1)), color = "#bbbbbb")+
+  # 主题：
+  xlab("")+
+  ylab("")+
+  theme(panel.grid = element_blank(), 
+        axis.text.x = element_text(angle = 90),
+        legend.position = "right")+
+  guides(fill = guide_colorbar("Correlation", title.position = "top",
+                               title.theme = element_text(face = "bold")),
+         color = guide_colorbar("-log10(Pvalue)", title.position = "top",
+                                title.theme = element_text(face = "bold")),
+         size = "none")
+
+ggsave("plot.pdf", height = 14, width = 15)
+
+##############################################################双向叠加柱状图
+library(ggplot2)
+library(reshape2)
+library(hrbrthemes)
+library(viridis)
+
+setwd("/Users/mac/Desktop/dengshan/Metabolites/")
+
+df <- read.table("metabolites.txt", sep="\t", header=T)
+
+p <- ggplot(df, aes(fill=class, y=value, x=group)) + 
+  geom_bar(position="stack", stat="identity",width=0.6) + 
+  scale_fill_manual(values = c('#366ABB', '#E17635', '#5793CA', '#9A9C9E', '#749E4E','#27548C', 
+                               '#585858', '#FFB82F', '#95420F', '#5c5794', '#A7C8DF','#d3d1e3'))+
+  labs(x="Group",y="Count",title="Metabolites") +
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(angle = 45, hjust = 1)) 
+p
+
+setwd("/Users/mac/Desktop/")
+ggsave("plot.pdf",p , height = 5, width = 5)
+
+##############################################################代谢物箱线图
+library(Seurat)
+library(patchwork)
+library(dplyr)
+library(cowplot)
+library(tidyr)
+library(ggplot2)
+library(RColorBrewer)
+library(SeuratObject)
+library(reshape2)
+library(harmony)
+library(ggpubr)
+library(stringr)
+library(ggrepel) 
+library(tidyverse)
+
+setwd("/Users/mac/Desktop/dengshan/Metabolites/箱线图")
+
+data <- read.table("all.txt",header = T,sep = "\t",check.names = F)
+data$sample <- factor(data$sample,levels=c('v1','v2','v3','v4','v5','v6','v7','v8','v9','v10','v11'))
+data$group <- factor(data$group,levels=c('D1','D4','D9','D11','D16'))
+
+p <- ggplot(data, aes(group,`Adenosine monophosphate`))+theme_bw()+RotatedAxis()+
+     #stat_boxplot(geom ="errorbar",width=0.2)+
+     geom_boxplot(color= c('grey40'),
+                  fill= c('grey50'),alpha=0.1,size=0.25,width = 0.6)+
+     geom_jitter(aes(color = sample),size =1.2 ,alpha= 1)+
+     #geom_line(aes(group=factor(sample), color= factor(sample)), linewidth = 0.45, linetype = 1)+
+     scale_color_manual(values = c('#9ED2C8', '#E4C755','#C1B8D7', '#EB8878','#8BB1D1', 
+                                   '#E39A35', '#B8D976','#EECCE1', '#9FA3A8','#BD956A', '#3A6963'))+
+     stat_compare_means(comparisons = list(c("D1","D4"),c("D1","D9"),c("D1","D11"),
+                                           c("D1","D16")),
+                        method="wilcox.test", #(t.test or wilcox.test)
+                        paired = T,
+                        size=2.5,
+                        p.adjust.method = "BH",
+                        symnum.args = list(cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                                           symbols = c( "***", "**", "*", "ns"))
+                        )+
+     labs(title = "Adenosine monophosphate")+
+     theme(plot.title = element_text(size=8,hjust=0.5))+
+     xlab("group")+ylab("log2(abundance+1)")+
+     theme(legend.position = 'right')
+p
+ggsave("/Users/mac/Desktop/Adenosine monophosphate.pdf", p, width=4.5,height=4)
+
+##############################################################代谢物热图
+setwd("/Users/mac/Desktop/dengshan/Metabolites/热图")
+
+data <- as.matrix(read.table("all.txt",row.names = 1,header = T,sep = "\t"))
+
+# 构建列注释信息
+annotation_col = data.frame(Group = factor(c(rep("g1",1),rep("g2",1),rep("g3",1),
+                                             rep("g4",1),rep("g5",1))))
+
+rownames(annotation_col) <- colnames(data)
+head(annotation_col)
+
+# 构建行注释信息
+annotation_row = data.frame(Class = factor(c(rep("Amino acids and Peptides",1),
+                                               rep("Benzenoids",2),
+                                               rep("Bile acids",4),
+                                               rep("Carnitines or Acyl carnitines",5),
+                                               rep("Fatty acids",17),
+                                               rep("Indoles and derivatives",1),
+                                               rep("Nucleosides",1),
+                                               rep("Organic acids",5))))
+rownames(annotation_row) = rownames(data)
+head(annotation_row)
+
+
+# 自定注释信息的颜色列表
+ann_colors = list(
+  Group = c('g1' = "#d3d1e3", 'g2' = "#b3b1d0", "g3" = "#9490bd", "g4" = "#7470a9",
+            "g5" = "#5c5794"),
+  Class = c("Amino acids and Peptides"="#5E0E12","Benzenoids"="#97231F","Bile acids"="#BB2F29",
+              "Carnitines or Acyl carnitines"="#DC4B39","Fatty acids"="#EE934F","Indoles and derivatives"="#F2B276",
+              "Nucleosides"="#F6D2A8","Organic acids"="#FAE7D1"))
+head(ann_colors)
+
+library(pheatmap)
+p <- pheatmap(data,
+              # 去掉聚类树：
+              cluster_cols = F,
+              cluster_rows = F,
+              # 加color bar：列注释信息；
+              annotation_col = annotation_col,
+              # 行注释信息：
+              annotation_row = annotation_row,
+              # color bar 颜色设定：
+              annotation_colors = ann_colors,
+              # 设置单元格颜色渐变；(5)表示分5段渐变；
+              color = colorRampPalette(c("#2166AC","#4393C3","#92C5DE","#D1E5F0",
+                                         "#FDDBC7","#F4A582","#D6604D","#B2182B"))(100), 
+              # 行、列标签的字体大小
+              fontsize_col = 5,
+              fontsize_row = 8,
+              # 是否显示行、列名
+              show_colnames = F,
+              # 设置每个单元格的宽度和高度
+              cellwidth = 10, 
+              cellheight = 8,
+              display_numbers = F ,number_color = "black",
+              # 设置标题：
+              main = "Metabolites",
+              # 设置标签是否显示
+              annotation_legend	= T,
+              scale="row")
+p
+
+ggsave("Metabolites_up.pdf",p,width=8,height=5,limitsize = FALSE)
+
+##############################################################圈圈图
+setwd("/Users/mac/Desktop/dengshan/Metabolites/环图")
+
+data <- read.table("all.txt",header = T,sep = "\t")
+
+
+p <- ggdonutchart(data, "value",
+                 label = "group",                               
+                 fill = "group",                            
+                 color = "white",
+                 title = "g1 VS g5 down",
+                 palette = c('#366ABB', '#E17635', '#5793CA', '#9A9C9E', '#749E4E','#27548C', 
+                             '#585858', '#FFB82F', '#95420F', '#5c5794', '#A7C8DF','#d3d1e3'))
+p
+ggsave("g1_vs_g5_down.pdf",p,width=5,height=5,limitsize = FALSE)
+
+##############################################################多组条形图
+setwd("/Users/mac/Desktop/dengshan/Metabolites/折线图")
+
+data <- read.table("all.txt",header = T,sep = "\t")
+
+p <- ggplot(data, aes(group,mean,color=metabolism))+theme_bw()+RotatedAxis()+
+  geom_point(aes(color = metabolism),size =1.2 ,alpha= 1)+
+  geom_errorbar(aes(ymin=mean-se, ymax=mean+se,colour=metabolism),width=0.2,size=0.2)+
+  geom_line(aes(group=factor(metabolism), color= factor(metabolism)), linewidth = 0.5, linetype = 1)+
+  scale_color_manual(values = c('#9ED2C8', '#E4C755','#C1B8D7', '#EB8878','#8BB1D1', 
+                                '#E39A35', '#B8D976','#EECCE1', '#9FA3A8','#BD956A', '#3A6963'))+
+  labs(title = "Glycine, serine and threonine metabolism")+
+  theme(plot.title = element_text(size=10))+
+  xlab("")+ylab("Fold Change(log2) rel.to D01")+
+  theme(legend.position = 'right')+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(angle = 0, hjust = 0.5))+
+  theme(aspect.ratio=1/1)
+p
+
+ggsave("/Users/mac/Desktop/Glycine, serine and threonine metabolism.pdf",p,width=4.5,height=3,limitsize = FALSE)
+
+########
+setwd("/Users/mac/Desktop/dengshan/Metabolites/折线图")
+
+data <- read.table("all.txt",header = T,sep = "\t")
+
+p <- ggplot(data, aes(group,log2FC,color=celltype))+theme_bw()+RotatedAxis()+
+  geom_point(aes(color = celltype),size =1.2 ,alpha= 1)+
+  geom_line(aes(group=factor(celltype), color= factor(celltype)), linewidth = 0.5, linetype = 1)+
+  scale_color_manual(values = c('#9ED2C8', '#E4C755','#C1B8D7', '#EB8878','#8BB1D1', 
+                                '#E39A35', '#B8D976','#EECCE1', '#9FA3A8','#BD956A', '#3A6963'))+
+  labs(title = "NK-like T")+
+  theme_classic()+
+  theme(plot.title = element_text(size=10))+
+  xlab("")+ylab("Fold Change (log2) rel. to D1 ")+
+  theme(legend.position = 'right')+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(angle = 0, hjust = 0.5))+
+  theme(aspect.ratio=1/1)
+p
+
+ggsave("/Users/mac/Desktop/NK-like T.pdf",p,width=4.5,height=3,limitsize = FALSE)
+
+
+##############################################################代谢物热图
+library(pheatmap)
+setwd('/Users/mac/Desktop/')
+data <- as.matrix(read.table("cs.txt",row.names = 1,header = T,sep = "\t",check.names = F))
+#构建行注释信息
+annotation_row = data.frame(cluster = factor(c(rep("Cluster 1",3),rep("Cluster 2",6),rep("Cluster 3",1),rep("Cluster 4",8),rep("Cluster 5",6))))
+rownames(annotation_row) = rownames(data)
+ann_colors = list(cluster = c("Cluster 1" = "#53A85F","Cluster 2" = "#EE934F",
+                              "Cluster 3"="#BB2F29","Cluster 4"="#A7C8DF","Cluster 5"="#142F67"))
+
+p <- pheatmap(data,
+              # 去掉聚类树：
+              cluster_cols = F,
+              cluster_rows = T,
+              breaks=seq(-1.5,1.5,length.out = 100),
+              # 行注释信息：
+              #annotation_row = annotation_row,
+              # color bar 颜色设定：
+              #annotation_colors = ann_colors,
+              fontsize=7,
+              # 设置单元格颜色渐变；(5)表示分5段渐变；
+              #color = colorRampPalette(c("#2166AC","#4393C3","#92C5DE","#D1E5F0","#FDDBC7","#F4A582","#D6604D","#B2182B"))(100), 
+              #color = colorRampPalette(c("#78BBE2","#D1E5F0","white","#F4A582","#D6604D"))(100), 
+              #color = colorRampPalette(c("#394A89","#7778A7","#FEFEFE","#D36B67","#AD3A36"))(100), 
+              color = colorRampPalette(c("#78BBE2","white","#DEA1A5"))(100), 
+              # 行、列标签的字体大小
+              fontsize_col = 8,
+              fontsize_row = 8,
+              # 是否显示行、列名
+              show_colnames = T,
+              # 设置每个单元格的宽度和高度
+              cellwidth = 12, 
+              cellheight = 12,
+              # 设置标题：
+              main = "Carnitines or Acylcarnitines",
+              # 设置标签是否显示
+              annotation_legend	= T,
+              scale="row",
+              border=T) 
+#border= T)
+p
+ggsave("Carnitines or Acylcarnitines.pdf",p,width=5,height=6,limitsize = FALSE)
+
+
