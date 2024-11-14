@@ -1,1 +1,373 @@
+#1、加载资源包
+library(Seurat)
+library(patchwork)
+library(dplyr)
+library(cowplot)
+library(tidyr)
+library(ggplot2)
+library(RColorBrewer)
+library(SeuratObject)
+library(reshape2)
+library(harmony)
+library(ggpubr)
+library(stringr)
+library(ggrepel) 
+library(tidyverse)
 
+#2、读取数据
+scRNA <- readRDS("scRNAzhushi.rds")
+
+#3、分群详细
+Mono <- subset(scRNA, idents = c("CD16+ Mono","CD14+ Mono","pDC","cDC"))
+
+#4、标准化和降维
+Mono <- NormalizeData(Mono,normalization.method = "LogNormalize", scale.factor = 10000)
+Mono <- FindVariableFeatures(Mono,selection.method = "vst",nfeatures = 2000)
+Mono <- ScaleData(Mono)
+Mono <- RunPCA(Mono,pc.genes = VariableFeatures(Mono),verbose = T)
+Mono <- RunHarmony(Mono, group.by.vars="orig.ident", max.iter.harmony = 30)
+DimHeatmap(Mono, dims = 1:15, cells = 500, balanced = TRUE)
+ElbowPlot(Mono,ndims = 20)
+pc.num = 1:20
+Mono <- RunUMAP(Mono, dims = pc.num, n.neighbors = 30L, min.dist = 0.3,reduction = "harmony")
+
+#5、细胞聚类
+Mono <- FindNeighbors(Mono, reduction = "harmony",dims = pc.num)
+Mono <- FindClusters(Mono, resolution = 0.5)
+plot1 <-DimPlot(Mono, reduction = "umap", label=T,raster=FALSE)#cols = allcolour
+plot1
+
+
+##6、差异基因分析
+Mono.markers <- FindAllMarkers(Mono, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+top20.Mono.markers <- Mono.markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+write.csv(Mono.markers,"Mono.allmarkers.csv")
+write.csv(top20.Mono.markers,"Mono.top20markers.csv")
+
+#7、Mono细胞注释
+Mono <- RenameIdents(Mono,
+                      '0'= "CCL3+ CD14+ Mono",#O:(CCL3+CCL4+CCL3L1+CCL4L1+S100A8+S100A9+IL1B+)
+                      '1'= "FCN1+ CD14+ Mono",#(FCN1+CD68+CD14+)
+                      '2'= "IFN+ CD16+ Mono",#(FCN1+CD68+FCGR3A+ISG15+IFIT3+IFITM2+IFITM3)
+                      '3'= "FCN1+ CD14+ Mono",#(FCN1+CD68+CD14+)
+                      '4'= "cDC2",#(CD1C+CLEC10A+FCER1A+ADAM8+)
+                      '5'= "CD16+ Mono",#(FCN1+CD68+FCGR3A+)
+                      '6'= "pDC",#(IRF8+LILRA4+GZMB+)
+                      '7'= "cDC2",#(CD1C+CLEC10A+FCER1A+ADAM8+)
+                      '8'= "FCN1+ CD14+ Mono",#(CD34+GATA2+CPA3+)
+                      '9'= "C1+ CD16+ Mono",#(FCN1+CD68+FCGR3A+C1QA+C1QB+)
+                      '10'= "IFN+ CD14+ Mono",#(IFIT1+ISG15+IFIT3+MX1+MX2+|FI44L+IFI44+IRF7)
+                      '11'= "cDC2",#(CD1C+CLEC10A+FCER1A+ADAM8+)
+                      '12'= "cDC1")#(CLEC9A+BATF3+ID01+FLT3+)
+
+#查看绘制umap的数据
+umap = Mono@reductions$umap@cell.embeddings %>%  #坐标信息
+  as.data.frame() %>% 
+  cbind(cell_type = Mono@active.ident) # 注释后的label信息,改为cell_type
+
+my36colors <- c('#53A85F', '#F1BB72', '#D6E7A3','#F3B1A0', '#57C3F3', '#476D87', '#E95C59', 
+                '#E59CC4', '#23452F')
+p1 <- ggplot(umap,aes(x= UMAP_1 , y = UMAP_2 ,color = cell_type)) +
+  geom_point(size = 0.25 , alpha = 0.5 )  +
+  scale_color_manual(values = my36colors)
+#c('#A9C3A5','#D3A96F','#7EBA6E','#7FBB6A','#6ABAC0','#5E7770','#736D5C','#36423E','#AE7964','#E8E364','#DF7B65','#B28F8E','#B8B273','#E2B985','#737C71')
+
+p2 <- p1  +
+  theme(panel.grid.major = element_blank(), #主网格线
+        panel.grid.minor = element_blank(), #次网格线
+        panel.border = element_blank(), #边框
+        axis.title = element_blank(),  #轴标题
+        axis.text = element_blank(), # 文本
+        axis.ticks = element_blank(),
+        panel.background = element_rect(fill = 'white'), #背景色
+        plot.background=element_rect(fill="white"))
+
+p3 <- p2 +         
+  theme(
+    legend.title = element_blank(), #去掉legend.title 
+    legend.key=element_rect(fill='white'), #
+    legend.text = element_text(size=10), #设置legend标签的大小
+    legend.key.size=unit(1,'cm') ) +  # 设置legend标签之间的大小
+  guides(color = guide_legend(override.aes = list(size=5)))+ #设置legend中点的大小 
+  theme(legend.position = "none")
+
+p4 <- p3 + 
+  geom_segment(aes(x = min(umap$UMAP_1) , y = min(umap$UMAP_2) ,
+                   xend = min(umap$UMAP_1) + 2, yend = min(umap$UMAP_2) ),
+               colour = "black", size=1,arrow = arrow(length = unit(0.3,"cm")))+ 
+  geom_segment(aes(x = min(umap$UMAP_1)  , y = min(umap$UMAP_2)  ,
+                   xend = min(umap$UMAP_1) , yend = min(umap$UMAP_2) + 2),
+               colour = "black", size=1,arrow = arrow(length = unit(0.3,"cm"))) +
+  annotate("text", x = min(umap$UMAP_1) +0.8, y = min(umap$UMAP_2) -0.5, label = "UMAP 1",
+           color="black",size = 3, fontface="bold" ) + 
+  annotate("text", x = min(umap$UMAP_1) -0.8, y = min(umap$UMAP_2) +0.8, label = "UMAP 2",
+           color="black",size = 3, fontface="bold" ,angle=90)+
+  theme(legend.position = "none")
+
+cell_type_med <- umap %>%
+  group_by(cell_type) %>%
+  summarise(
+    UMAP_1 = median(UMAP_1),
+    UMAP_2 = median(UMAP_2)
+  )
+library(ggrepel)
+
+p5 <- p4 +
+  geom_label_repel(aes(label=cell_type), fontface="bold",data = cell_type_med,
+                   point.padding=unit(0.5, "lines"))+
+  theme(legend.position = "none")
+p5
+
+#8、Mono细胞比例
+sce_cell <- data.frame()
+a <- list()
+i=1
+for (sample in names(table(Mono@meta.data$newname))){
+  a<-list(prop.table(table(Mono@active.ident[Mono$newname==sample])))
+  for (ct in names(a[[1]])){
+    sce_cell[i,"percentage"] <- as.numeric(a[[1]][ct])
+    sce_cell[i,"celltype"] <- names(a[[1]][ct])
+    sce_cell[i,"group"]<- names(table(Mono$group[Mono$newname==sample]))
+    sce_cell[i,"people"]<- names(table(Mono$people[Mono$newname==sample]))
+    sce_cell[i,"sample"]<-sample
+    i=i+1
+  }
+}
+library(ggpubr)
+for (celltype in names(table(sce_cell$celltype))){
+  g <- ggplot(data = sce_cell[sce_cell$celltype==celltype,],aes(group,percentage))+
+    geom_boxplot(color= c('grey40'),
+                 fill= c('grey50'),alpha=0.1,size=0.25,width = 0.6)+
+    stat_compare_means(comparisons = list(c("1289m","4400m"),c("1289m","5500m"),c("1289m","6300-3200m"),
+                                          c("1289m","7546-1289m")),
+                       method="wilcox.test", #(t.test or wilcox.test)
+                       paired = T,
+                       size=2,
+                       symnum.args = list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1),
+                                          symbols = c("****", "***", "**", "*", "ns")))+
+    geom_point(aes(color = people),size =1.2 ,alpha= 1)+
+    geom_line(aes(group=people, color= factor(people)), linetype = 1,
+              linewidth = 0.45)+ 
+    scale_color_manual(values = c('#9ED2C8', '#E4C755','#C1B8D7', '#EB8878','#8BB1D1', 
+                                  '#E39A35', '#B8D976','#EECCE1', '#9FA3A8','#BD956A', '#3A6963'))+
+    labs(title = paste0(celltype))+ 
+    theme_classic()+
+    theme(panel.background=element_rect(fill="white",colour="black",size=0.25), # 填充框内主题颜色，边框颜色和边框线条粗细
+          axis.line=element_line(colour="black",size=0.5), # x,y轴颜色，粗细
+          axis.title=element_text(size=6,color="black"), # x,y轴名设置
+          axis.text = element_text(size=6,color="black"), # x,y轴文本设置
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position="right")+border("black")#加边框
+  
+  ggsave(paste0(celltype,"_persentage.pdf"),g,width=4,height=5)
+}
+
+#9、GO/KEGG分析
+###1、查找DEG
+celltype = "pDC"
+celltype_data <- celltype1
+#ident.1 = "1289m", ident.2 = "4400m",ident.3 = "5500m",ident.4 = "6300-3200m",ident.5 = "7546-1289m"
+deg <- FindMarkers(celltype_data, ident.1 = "4400m", ident.2 = "1289m",
+                   group.by = 'group',recorrect_umi = TRUE,logfc.threshold = 0 ,min.pct = 0.1)
+write.csv(deg,paste0(celltype,"_DEG.csv"))
+sign_deg <- subset(deg, p_val_adj < 0.05 & abs(avg_log2FC) > 0.58)
+write.csv(sign_deg,paste0(celltype,"_Sign_DEG.csv"))
+#sign_deg_up <- subset(deg, p_val_adj < 0.05 & avg_log2FC > 0.58)
+#sign_deg_up$group <- "5_vs_1"
+#sign_deg_down <- subset(deg, p_val_adj < 0.05 & avg_log2FC < -0.58)
+#sign_deg_down$group <- "5_vs_1"
+#write.csv(sign_deg_up,paste0(celltype,"_up_DEG.csv"))
+#write.csv(sign_deg_down,paste0(celltype,"_down_DEG.csv"))
+
+###2、火山图
+library(ggrepel)
+#setwd("/Users/mac/Desktop/dengshan/Mono/Figure_Mono/2Mono/GO/DEG/")
+#deg <- read.csv("2Mono_DEG.csv",row.names = 1)
+degdf <- deg
+degdf$sign <- ifelse(degdf$p_val_adj < 0.05 & abs(degdf$avg_log2FC) > 0.58,rownames(degdf),NA)
+degdf$symbol <- rownames(deg)
+logFC_t=0
+P.Value_t = 0.05
+degdf$change = ifelse(degdf$p_val_adj < P.Value_t & degdf$avg_log2FC < - 0.58,"down",
+                      ifelse(degdf$p_val_adj < P.Value_t & degdf$avg_log2FC > 0.58,"up","stable"))
+custom_genes <- c("CCL3","CCL4","HLA-DPA1","HLA-DQA1","HLA-DQB1","HLA-DRA","HLA-DRB5","IL1B","IL1RN","LYZ","S100A10","S100A9",
+                  "TNF","FOXO1","WWOX","PRKN","RAP1GAP2","ARHGAP24") 
+p<-ggplot(degdf, aes(avg_log2FC,  -log10(p_val_adj))) +
+  geom_point(alpha= 1, size=2, aes(color=change)) +
+  ylab("-log10(Pvalue)")+
+  scale_color_manual(values=c("blue", "grey","red"))+
+  geom_hline(yintercept = -log10(P.Value_t),lty=4,col="black",lwd=0.3) +
+  geom_vline(xintercept = 0.58,lty=2,col="black",lwd=0.3)+
+  geom_vline(xintercept = -0.58,lty=2,col="black",lwd=0.3)+
+  geom_label_repel(data = degdf[degdf$symbol %in% custom_genes, ],aes(label=sign), color="grey50", 
+                   box.padding=unit(0.3, "lines"),point.padding=unit(0.3, "lines"), segment.colour = "grey50",
+                   max.overlaps = getOption("ggrepel.max.overlaps", default = 20))+
+  geom_segment(data = degdf[degdf$symbol %in% custom_genes, ], 
+               aes(x = avg_log2FC, y = -log10(p_val_adj), xend = avg_log2FC, yend = -log10(p_val_adj) - 0.5), color = "grey50") +
+  theme_bw() + NoLegend()
+p
+#ggsave(paste0(celltype,"_VolcanoPlot.pdf"), plot=p, width=15, height=15)
+ggsave("VolcanoPlot.pdf", plot=p, width=10, height=10)
+## 获取上下调基因
+gene_up=rownames(sign_deg[sign_deg$avg_log2FC > 0.58,])
+gene_down=rownames(sign_deg[sign_deg$avg_log2FC < -0.58,])
+## 把SYMBOL改为ENTREZID
+library(org.Hs.eg.db)
+gene_up=as.character(na.omit(AnnotationDbi::select(org.Hs.eg.db,
+                                                   keys = gene_up,
+                                                   columns = 'ENTREZID',
+                                                   keytype = 'SYMBOL')[,2]))
+gene_down=as.character(na.omit(AnnotationDbi::select(org.Hs.eg.db,
+                                                     keys = gene_down,
+                                                     columns = 'ENTREZID',
+                                                     keytype = 'SYMBOL')[,2]))
+###3、KEGG_GO富集
+##CC表示细胞组分，MF表示分子功能，BP表示生物学过程，ALL表示同时富集三种过程
+##一般是做BP,MF,CC这3组再合并成一个数据框，方便后续摘取部分通路绘图。
+library(clusterProfiler)
+for (deg_type in c("up","down")){
+  if (deg_type == "up"){
+    geneset = gene_up}
+  if (deg_type == "down"){
+    geneset = gene_down}
+  ego_ALL <- enrichGO(gene = geneset,#我们上面定义了
+                      OrgDb=org.Hs.eg.db,
+                      keyType = "ENTREZID",
+                      ont = "ALL",#富集的GO类型
+                      pAdjustMethod = "BH",#这个不用管，一般都用的BH
+                      minGSSize = 1,
+                      pvalueCutoff = 0.05,#P值可以取0.05
+                      qvalueCutoff = 0.05,
+                      readable = TRUE)
+  
+  ego_CC <- enrichGO(gene = geneset,
+                     OrgDb=org.Hs.eg.db,
+                     keyType = "ENTREZID",
+                     ont = "CC",
+                     pAdjustMethod = "BH",
+                     minGSSize = 1,
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.05,
+                     readable = TRUE)
+  
+  ego_BP <- enrichGO(gene = geneset,
+                     OrgDb=org.Hs.eg.db,
+                     keyType = "ENTREZID",
+                     ont = "BP",
+                     pAdjustMethod = "BH",
+                     minGSSize = 1,
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.05,
+                     readable = TRUE)
+  
+  ego_MF <- enrichGO(gene = geneset,
+                     OrgDb=org.Hs.eg.db,
+                     keyType = "ENTREZID",
+                     ont = "MF",
+                     pAdjustMethod = "BH",
+                     minGSSize = 1,
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.05,
+                     readable = TRUE)
+  if (is.null(ego_ALL)==FALSE){
+    p <-dotplot(ego_ALL)
+    ggsave(paste0(celltype,"_GO_Enriched_dotplot_",deg_type,".pdf"), plot=p, width=15, 
+           height=10)
+    #4、将结果保存到当前路径
+    ego_ALL <- as.data.frame(ego_ALL)
+    ego_result_BP <- as.data.frame(ego_BP)
+    ego_result_CC <- as.data.frame(ego_CC)
+    ego_result_MF <- as.data.frame(ego_MF)
+    ego <- rbind(ego_result_BP,ego_result_CC,ego_result_MF)#或者这样也能得到ego_ALL一样的结果
+    write.csv(ego_ALL,file = paste0(celltype,"_ego_",deg_type,"_ALL.csv"),row.names = T)
+    write.csv(ego_result_BP,file = paste0(celltype,"_ego_",deg_type,"_result_BP.csv"),
+              row.names = T)
+    write.csv(ego_result_CC,file = paste0(celltype,"_ego_",deg_type,"_result_CC.csv"),
+              row.names = T)
+    write.csv(ego_result_MF,file = paste0(celltype,"_ego_",deg_type,"_result_MF.csv"),
+              row.names = T)
+    write.csv(ego,file = paste0(celltype,"_ego_",deg_type,".csv"),row.names = T)
+    
+    #5、有时候我们富集到的通路太多了，不方便绘制图片，可以选择部分绘制，这时候跳过第4步，来到第5步
+    display_number = c(22, 23, 23)#这三个数字分别代表选取的BP、CC、MF的通路条数，这个自己设置就行了
+    ego_result_BP <- as.data.frame(ego_BP)[1:display_number[1], ]
+    ego_result_CC <- as.data.frame(ego_CC)[1:display_number[2], ]
+    ego_result_MF <- as.data.frame(ego_MF)[1:display_number[3], ]
+    
+    ##将以上我们摘取的部分通路重新组合成数据框
+    go_enrich_df <- data.frame(
+      ID=c(ego_result_BP$ID, ego_result_CC$ID, ego_result_MF$ID), 
+      Description=c(ego_result_BP$Description,ego_result_CC$Description,ego_result_MF$Description),
+      GeneNumber=c(ego_result_BP$Count, ego_result_CC$Count, ego_result_MF$Count),
+      type=factor(c(rep("biological process", display_number[1]), 
+                    rep("cellular component", display_number[2]),
+                    rep("molecular function", display_number[3])), 
+                  levels=c("biological process", "cellular component","molecular function" )))
+    
+    ##通路的名字太长了，我选取了通路的前五个单词作为通路的名字
+    for(i in 1:nrow(go_enrich_df)){
+      description_splite=strsplit(go_enrich_df$Description[i],split = " ")
+      description_collapse=paste(description_splite[[1]][1:10],collapse = " ") #这里的5就是指5个单词的意思，可以自己更改
+      go_enrich_df$Description[i]=description_collapse
+      go_enrich_df$Description=gsub(pattern = "NA","",go_enrich_df$Description)
+    }
+    
+    ##开始绘制GO柱状图
+    ###横着的柱状图
+    go_enrich_df$type_order=factor(rev(as.integer(rownames(go_enrich_df))),labels=rev(go_enrich_df$Description))
+    #这一步是必须的，为了让柱子按顺序显示，不至于很乱
+    COLS <- c("#66C3A5", "#8DA1CB", "#FD8D62")#设定颜色
+    
+    p1<- ggplot(data=go_enrich_df, aes(x=type_order,y=GeneNumber, fill=type)) + #横纵轴取值
+      geom_bar(stat="identity", width=0.8) + #柱状图的宽度，可以自己设置
+      scale_fill_manual(values = COLS) + ###颜色
+      coord_flip() + ##这一步是让柱状图横过来，不加的话柱状图是竖着的
+      xlab("GO term") + 
+      ylab("Gene_Number") + 
+      labs(title = paste0("The Most Enriched GO Terms ",deg_type))+
+      theme_bw()
+    ggsave(paste0(celltype,"_GO_Enriched_",deg_type,".pdf"), plot=p1, width=10, height=15)
+    ###竖着的柱状图 
+    go_enrich_df$type_order=factor(rev(as.integer(rownames(go_enrich_df))),labels=rev(go_enrich_df$Description))
+    COLS <- c("#66C3A5", "#8DA1CB", "#FD8D62")
+    p2<- ggplot(data=go_enrich_df, aes(x=type_order,y=GeneNumber, fill=type)) + 
+      geom_bar(stat="identity", width=0.8) + 
+      scale_fill_manual(values = COLS) + 
+      theme_bw() + 
+      xlab("GO term") + 
+      ylab("Num of Genes") + 
+      labs(title = paste0("The Most Enriched GO Terms ",deg_type))+ 
+      theme(axis.text.x=element_text(face = "bold", color="gray50",angle = 70,vjust = 1, hjust = 1 ))
+    #angle是坐标轴字体倾斜的角度，可以自己设置
+    ggsave(paste0(celltype,"_GO_Enriched_",deg_type,"2.pdf"), 
+           plot=p2, width=15, height=10)
+    
+    
+    #1、KEGG富集
+    kk <- enrichKEGG(gene = geneset,keyType = "kegg",organism= "human", qvalueCutoff = 0.05, pvalueCutoff=0.05)
+    
+    #2、可视化
+    ###柱状图
+    hh <- as.data.frame(kk)
+    write.csv(hh,file = paste0(celltype,"_enrichKEGG_",deg_type,".csv"),row.names = T)
+    if (nrow(hh) > 0){
+      rownames(hh) <- 1:nrow(hh)
+      hh$order=factor(rev(as.integer(rownames(hh))),labels = rev(hh$Description))
+      p <- ggplot(hh,aes(y=order,x=Count,fill=p.adjust))+
+        geom_bar(stat = "identity",width=0.7)+####柱子宽度
+        #coord_flip()+##颠倒横纵轴
+        scale_fill_gradient(low = "red",high ="blue" )+#颜色自己可以换
+        labs(title = paste0("KEGG Pathways Enrichment ",deg_type),
+             x = "Gene numbers", 
+             y = "Pathways")+
+        theme(axis.title.x = element_text(face = "bold",size = 16),
+              axis.title.y = element_text(face = "bold",size = 16),
+              legend.title = element_text(face = "bold",size = 16))+
+        theme_bw()
+      ggsave(paste0(celltype,"_enrichKEGG_",deg_type,".pdf"), 
+             plot=p, width=10, height=13)
+      p<-dotplot(kk)
+      ggsave(paste0(celltype,"_enrichKEGG_dotplot_",deg_type,".pdf"), 
+             plot=p, width=10, height=10)
+    }}
+}
