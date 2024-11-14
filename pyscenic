@@ -1,0 +1,337 @@
+##加载包
+library(Seurat)
+library(SCopeLoomR)
+library(AUCell)
+library(SCENIC)
+library(dplyr)
+library(KernSmooth)
+library(RColorBrewer)
+library(plotly)
+library(BiocParallel)
+library(grid)
+library(ComplexHeatmap)
+library(data.table)
+library(SCENIC)
+library(loomR)
+
+##提取 out_SCENIC.loom 信息
+setwd('/media/AnalysisTempDisk2/Yangshichen/pyscenic/')
+loom <- open_loom('pbmc_10w_output.loom')
+
+regulons_incidMat <- get_regulons(loom,column.attr.name="Regulons")
+regulons <- regulonsToGeneLists(regulons_incidMat)
+regulonAUC <- get_regulons_AUC(loom,column.attr.name='RegulonsAUC')
+regulonAucThresholds <- get_regulon_thresholds(loom)
+tail(regulonAucThresholds[order(as.numeric(names(regulonAucThresholds)))])
+embeddings <- get_embeddings(loom)  
+close_loom(loom)
+
+##可视化
+sce <- readRDS("pbmc_10w.rds") 
+sub_regulonAUC <- regulonAUC[,match(colnames(sce),colnames(regulonAUC))]
+dim(sub_regulonAUC)
+sce 
+
+identical(colnames(sub_regulonAUC), colnames(sce))
+cellClusters <- data.frame(row.names = colnames(sce), seurat_clusters = as.character(sce$seurat_clusters))
+cellTypes <- data.frame(row.names = colnames(sce), celltype = sce$seurat_annotations)
+head(cellTypes)
+head(cellClusters)
+sub_regulonAUC[1:4,1:4] 
+save(sub_regulonAUC,cellTypes,cellClusters,sce,file = 'for_rss_and_visual.Rdata')
+
+#可视化示例：PAX5(+)和REL(+)
+regulonsToPlot = c('ATF4','REL(+)')
+sce@meta.data = cbind(sce@meta.data ,t(assay(sub_regulonAUC[regulonsToPlot,])))
+DotPlot(sce, features = unique(regulonsToPlot)) + RotatedAxis()
+RidgePlot(sce, features = regulonsToPlot , ncol = 2) + RotatedAxis()
+VlnPlot(sce, features = regulonsToPlot,pt.size = 0) 
+
+##TF活性均值
+# Split the cells by cluster:
+selectedResolution <- "celltype" # select resolution
+cellsPerGroup <- split(rownames(cellTypes), cellTypes[,selectedResolution]) 
+
+# 去除extened regulons
+sub_regulonAUC <- sub_regulonAUC[onlyNonDuplicatedExtended(rownames(sub_regulonAUC)),] 
+dim(sub_regulonAUC)
+
+# Calculate average expression:
+regulonActivity_byGroup <- sapply(cellsPerGroup,function(cells)rowMeans(getAUC(sub_regulonAUC)[,cells]))
+write.csv(regulonActivity_byGroup,"TF活性均值_raw.csv")
+# Scale expression. 
+# Scale函数是对列进行归一化，所以要把regulonActivity_byGroup转置成细胞为行，基因为列
+regulonActivity_byGroup_Scaled <- t(scale(t(regulonActivity_byGroup),center = T, scale=T)) 
+# 同一个regulon在不同cluster的scale处理
+dim(regulonActivity_byGroup_Scaled)
+regulonActivity_byGroup_Scaled=regulonActivity_byGroup_Scaled[]
+regulonActivity_byGroup_Scaled=na.omit(regulonActivity_byGroup_Scaled)
+write.csv(regulonActivity_byGroup_Scaled,"TF活性均值_scaled.csv")
+
+##热图查看TF分布
+pheatmap(regulonActivity_byGroup_Scaled)
+
+##rss查看特异TF
+rss <- calcRSS(AUC=getAUC(sub_regulonAUC), 
+               cellAnnotation=cellTypes[colnames(sub_regulonAUC), selectedResolution]) 
+rss <- na.omit(rss) 
+rssPlot <- plotRSS(rss)
+plotly::ggplotly(rssPlot$plot)
+
+##计算细胞特异性TF
+cellinfo <- sce@meta.data[,c('seurat_annotations','group',"nFeature_RNA","nCount_RNA")]#细胞meta信息
+colnames(cellinfo)=c('seurat_annotations', 'group','nGene' ,'nUMI')
+cellTypes <-  as.data.frame(subset(cellinfo,select = 'seurat_annotations'))
+selectedResolution <- "seurat_annotations"
+sub_regulonAUC <- regulonAUC
+
+rss <- calcRSS(AUC=getAUC(sub_regulonAUC),
+               cellAnnotation=cellTypes[colnames(sub_regulonAUC),
+                                        selectedResolution])
+rss = na.omit(rss)
+write.csv(rss,"TF细胞特异性.csv")
+
+pdf("细胞特异性TF.pdf", height = 8, width = 8)
+rssPlot <- plotRSS(rss,zThreshold = 3,cluster_columns = FALSE,order_rows = TRUE,thr=0.1,varName = "cellType",
+                   col.low = '#330066',col.mid = '#66CC66',col.high = '#FFCC33')
+rssPlot
+dev.off()
+
+##展示细胞特异性TF
+
+setwd('/media/AnalysisTempDisk2/Yangshichen/pyscenic/细胞特异性TF')
+cell_rss <- as.data.frame(rss)
+#需要作图的细胞类型
+celltype <- colnames(cell_rss)
+rssRanklist <- list()
+
+for(i in 1:length(celltype)) {
+  
+  data_rank_plot <- cbind(as.data.frame(rownames(cell_rss)),
+                          as.data.frame(cell_rss[,celltype[i]]))#提取数据
+  
+  colnames(data_rank_plot) <- c("TF","celltype")
+  data_rank_plot <- na.omit(data_rank_plot)#去除NA
+  data_rank_plot <- data_rank_plot[order(data_rank_plot$celltype,decreasing = T),]#降序排序
+  data_rank_plot$rank <- seq(1,nrow(data_rank_plot))#添加排序
+  
+  p <- ggplot(data_rank_plot,aes(x=rank,y=celltype)) +
+    geom_point(size=3,shape=16,color="#1F77B4",alpha=0.4) +
+    geom_point(data = data_rank_plot[1:6,],
+               size=3,color="#DC050C") + #选择前6个进行标记
+    theme_bw() +
+    theme(axis.title = element_text(colour = "black", size = 12),
+          axis.text = element_text(colour = "black", size = 10),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank()) +
+    labs(x="Rgeulons Rank", y="Specificity Score",title = celltype[i]) +
+    geom_text_repel(data=data_rank_plot[1:6,],
+                    aes(label=TF),color="black",size=3,fontface="italic",
+                    arrow = arrow(end="first",length=unit(0.01,"npc")),box.padding=0.2,
+                    point.padding=0.3,segment.color="black",
+                    segment.size=0.3,force=1,max.iter=3e3)
+  rssRanklist[[i]] <- p
+  ggsave(paste0(celltype[i],"_specific_TF.pdf"),p,height=4,width=2.5)
+}
+
+pdf("特异性TF.pdf", height = 30, width = 12)
+library(cowplot)
+plot_grid(rssRanklist[[1]],rssRanklist[[2]],rssRanklist[[3]],rssRanklist[[4]],rssRanklist[[5]],rssRanklist[[6]],
+          rssRanklist[[7]],rssRanklist[[8]],rssRanklist[[9]],rssRanklist[[10]],rssRanklist[[11]],rssRanklist[[12]],
+          rssRanklist[[13]],rssRanklist[[14]],rssRanklist[[15]],rssRanklist[[16]],rssRanklist[[17]],rssRanklist[[18]],
+          rssRanklist[[19]],rssRanklist[[20]],rssRanklist[[21]],rssRanklist[[22]],rssRanklist[[23]],rssRanklist[[24]],
+          rssRanklist[[25]],rssRanklist[[26]],rssRanklist[[27]],rssRanklist[[28]],rssRanklist[[29]],rssRanklist[[30]],
+          rssRanklist[[31]],rssRanklist[[32]],rssRanklist[[33]],rssRanklist[[34]],rssRanklist[[35]],rssRanklist[[36]],
+          rssRanklist[[37]],rssRanklist[[38]],ncol=5)
+dev.off()
+
+##差异分析不同细胞类型不同组差异TF
+library(limma)
+library(SCENIC)
+library(AUCell)
+library(data.table)
+
+setwd('/media/AnalysisTempDisk2/Yangshichen/pyscenic/')
+loom <- open_loom('pbmc_10w_output.loom')
+regulons_incidMat <- get_regulons(loom,column.attr.name="Regulons")
+regulons <- regulonsToGeneLists(regulons_incidMat)
+regulonAUC <- get_regulons_AUC(loom,column.attr.name='RegulonsAUC')
+regulonAucThresholds <- get_regulon_thresholds(loom)
+tail(regulonAucThresholds[order(as.numeric(names(regulonAucThresholds)))])
+embeddings <- get_embeddings(loom)  
+close_loom(loom)
+
+anaAUC <- regulonAUC
+anaAUC <- anaAUC[onlyNonDuplicatedExtended(rownames(anaAUC)),]
+sce <- readRDS("pbmc_10w.rds") 
+ana.cellinfo <- sce@meta.data#细胞信息
+
+setwd('/media/AnalysisTempDisk2/Yangshichen/pyscenic/细胞差异性TF/Active CD16+ NK')
+#选取需要分析的细胞
+cell.cellinfo <- subset(ana.cellinfo, ana.cellinfo$seurat_annotations=='Active CD16+ NK')
+targets <- data.table(FileName=rownames(cell.cellinfo),Target=cell.cellinfo,Target=cell.cellinfo$group)#提取组和分组
+targets$Target <- gsub("1371m","g1",targets$Target)
+targets$Target <- gsub("4400m","g2",targets$Target)
+targets$Target <- gsub("5500m","g3",targets$Target)
+targets$Target <- gsub("6300-4000m","g4",targets$Target)
+targets$Target <- gsub("7546-g1","g5",targets$Target)
+
+#接下来其实就是常规的差异分析了
+lev <- unique(targets$Target)
+f <- factor(targets$Target,levels=lev)
+design <- model.matrix(~0+f)#样本矩阵
+colnames(design) <- lev #design矩阵重命名
+
+eset=getAUC(anaAUC) #获取所有细胞TF的AUC值
+eset=eset[,targets$FileName]#我们只选取要分析的T细胞
+eset<-t(scale(t(eset))) #scale
+
+#比较分析Limma
+cont.wt <- makeContrasts("g5-g1",levels=design)
+fit <- lmFit(eset, design)
+fit2 <- contrasts.fit(fit,cont.wt)
+fit2 <- eBayes(fit2)
+tT=topTable(fit2,adjust="BH",sort.by="logFC",n=Inf)#差异分析结果
+tT = subset(tT,select=c("adj.P.Val","P.Value","logFC"))
+colnames(tT)=c("FDR","P.Value","LogFC")#选择关键的三列即可
+write.table(tT,file="Active CD16+ NK_TF_g5-g1.csv",sep="\t",quote=F)#保存结果
+#接下来就可以按照不同的阈值筛选显著的TF了，其实这样的差异分析对于结果的解释和应用上更有说服力，
+#这样我们可以直观的看到某些转录因子在不同细胞状态下的差异可视化的话可以用热图、火山图等展示
+logFoldChange <- 0.22
+adjustP <- 0.05
+diffSig <- tT[with(tT,(abs(LogFC)>logFoldChange & FDR < adjustP )),]
+diffSig=na.omit(diffSig)
+rownames(diffSig)<-gsub("\\(","", rownames(diffSig))
+rownames(diffSig)<-gsub("\\)","", rownames(diffSig))
+rownames(diffSig)<-gsub("\\+","", rownames(diffSig))
+write.csv(diffSig,file ="diffSig_Active CD16+ NK_TF_g5-g1.csv")
+
+#我们用热图展示以下差异结果
+#先计算每个样本细胞的平均表达值
+regulonActivity_byCellType <- sapply(split(rownames(cell.cellinfo),cell.cellinfo$group),
+                                     function(cells) rowMeans(as.matrix(getAUC(anaAUC)[,cells])))
+regulonActivity_byCellType_Scaled <- regulonActivity_byCellType
+#这里有一个基础知识，很多文章展示TF不显示+号，用gsub函数就可以去除
+rownames(regulonActivity_byCellType_Scaled)<-gsub("\\(","",rownames(regulonActivity_byCellType_Scaled))
+rownames(regulonActivity_byCellType_Scaled)<-gsub("\\)","",rownames(regulonActivity_byCellType_Scaled)) 
+rownames(regulonActivity_byCellType_Scaled)<-gsub("\\+","",rownames(regulonActivity_byCellType_Scaled))
+#选择差异显著的TF进行可视化
+selTF <- rownames(diffSig)
+sel_regulonActivity_byCellType_Scaled <- regulonActivity_byCellType_Scaled[selTF,]
+annotation_col = data.frame(group = c("1371m","4400m","5500m","6300-4000m","7546-1371m"))
+rownames(annotation_col)<-colnames(regulonActivity_byCellType_Scaled)
+ann_colors = list(group = c('1371m' = "#d3d1e3", '4400m' = "#b3b1d0", "5500m" = "#9490bd", "6300-4000m" = "#7470a9",
+                            "7546-1371m" = "#5c5794"))
+
+pheatmap::pheatmap(sel_regulonActivity_byCellType_Scaled,
+                   color=colorRampPalette(c("#00a9ff","white","#F8766D"))(100),
+                   breaks=seq(-2,2,length.out = 100),
+                   border_color=NA,
+                   cluster_rows = F,
+                   cluster_cols=F,
+                   annotation_col = annotation_col,
+                   annotation_colors = ann_colors,
+                   scale="row",
+                   main = "Memory B TF")
+
+##转录因子及其靶基因可视化
+#我们还可以可视化感兴趣的TF调控的靶基因
+#TF与靶基因的关系在pyscenic分析得到的第二个文件
+setwd('/media/AnalysisTempDisk2/Yangshichen/pyscenic_2/')
+sce_regulons <- read.table("reg.tsv", header=T, sep="\t")
+sce_regulons <- sce_regulons[-2,]
+colnames(sce_regulons) <- sce_regulons[1,]
+sce_regulons <- sce_regulons[-1,]
+colnames(sce_regulons) <- c("TF","MotifID","AUC","NES","MotifSimilarityQvalue","OrthologousIdentity",
+                            "Annotation","Context","TargetGenes","RankAtMax")
+
+#FOXP3
+FOXP3 <- subset(sce_regulons,TF=='FOXP3')
+FOXP3 <- FOXP3[which(FOXP3$AUC>0.1),]
+FOXP3 <- FOXP3[,c("TF","TargetGenes")]
+FOXP3$TargetGenes <-gsub("\\[","",FOXP3$TargetGenes)
+FOXP3$TargetGenes <-gsub("\\]","",FOXP3$TargetGenes)
+FOXP3$TargetGenes <-gsub("\\(","",FOXP3$TargetGenes)
+FOXP3$TargetGenes <-gsub("\\)","",FOXP3$TargetGenes)
+FOXP3$TargetGenes <-gsub("\\'","",FOXP3$TargetGenes)
+library(stringr)
+split_FOXP3 <- str_split(FOXP3$TargetGenes,",")
+FOXP31 <- as.data.frame(split_FOXP3[[1]])
+FOXP32 <- as.data.frame(split_FOXP3[[2]]) 
+names(FOXP31) <- "TF"
+names(FOXP32) <- "TF"
+FOXP3 <- rbind(FOXP31,FOXP32)
+FOXP3_target <- FOXP3[seq(1,nrow(FOXP3),2),]
+FOXP3_score <- FOXP3[seq(0,nrow(FOXP3),2),]
+FOXP3_gene <- data.frame(FOXP3_target,FOXP3_score)
+FOXP3_gene <- FOXP3_gene[!duplicated(FOXP3_gene$FOXP3_target),]
+FOXP3_gene$gene <- 'FOXP3'
+colnames(FOXP3_gene) <- c("target","score",'tf')
+
+#CHD1
+CHD1 <- subset(sce_regulons,TF=='CHD1')
+CHD1 <- CHD1[which(CHD1$AUC>0.1),]
+CHD1 <- CHD1[,c("TF","TargetGenes")]
+CHD1$TargetGenes <-gsub("\\[","",CHD1$TargetGenes)
+CHD1$TargetGenes <-gsub("\\]","",CHD1$TargetGenes)
+CHD1$TargetGenes <-gsub("\\(","",CHD1$TargetGenes)
+CHD1$TargetGenes <-gsub("\\)","",CHD1$TargetGenes)
+CHD1$TargetGenes <-gsub("\\'","",CHD1$TargetGenes)
+library(stringr)
+split_CHD1 <- str_split(CHD1$TargetGenes,",")
+CHD11 <- as.data.frame(split_CHD1[[1]])
+CHD12 <- as.data.frame(split_CHD1[[2]]) 
+names(CHD11) <- "TF"
+names(CHD12) <- "TF"
+CHD1 <- rbind(CHD11,CHD12)
+CHD1_target <- CHD1[seq(1,nrow(CHD1),2),]
+CHD1_score <- CHD1[seq(0,nrow(CHD1),2),]
+CHD1_gene <- data.frame(CHD1_target,CHD1_score)
+CHD1_gene <- CHD1_gene[!duplicated(CHD1_gene$CHD1_target),]
+CHD1_gene$gene <- 'CHD1'
+colnames(CHD1_gene) <- c("target","score",'tf')
+
+TF_target <- rbind(FOXP3_gene,CHD1_gene)
+TF_target$score <- as.numeric(TF_target$score)
+
+###接下来就是网络图了
+#节点数据
+paths <- c("FOXP3","CHD1")#列重命名
+nodelist <- list()
+for (i in 1:length(paths)){
+  node <- subset(TF_target,tf == paths[i])#提取数据
+  nodes <- data.frame(name = unique(union(node$tf,node$target)))#整理dataframe
+  nodes$value <- c(sum(node$score)/nrow(node),node$score)
+  nodelist[[i]] <- nodes
+}
+#提取每个大节点数据
+
+nodes <- rbind(nodelist[[1]],nodelist[[2]])#将三个节点文件合并
+nodes$cluster <- c(rep("FOXP3",1),rep("FOXP3_gene",6),
+                   rep("CHD1",1),rep("CHD1_gene",32))#分组，为了后续颜色设置
+edges <- unique(TF_target[c("tf","target","score")])#边缘文件
+edges$class <- edges$tf
+
+library(ggraph)
+library(tidygraph)
+
+layout_cir <- tbl_graph(nodes = nodes,edges = edges)#构建ggraph作图文件
+
+#作图
+p <- ggraph(layout_cir,layout='linear',circular = TRUE) + #选择circle
+  geom_node_point(aes(size=value,colour = cluster))+ #节点，大小用我们赋的值表示，颜色用分组
+  geom_node_text(aes(x = 1.08*x,
+                     y = 1.08*y,
+                     label=name,
+                     color=cluster,
+                     angle = -((-node_angle(x,y) + 90) %% 180) + 90),
+                  hjust='outward') + #文字设置。x，y是为了调整位置。angle是为调整角度
+  geom_edge_arc(aes(colour=class)) + #连线为曲线
+  theme_void() + #theme主题
+  theme(legend.position ="none") + 
+  scale_colour_manual(values =c('#407972','#961E28','#D46724','#0f8096')) + #节点颜色
+  scale_edge_colour_manual(values = c('#961E28','#D46724','#Of8096')) + #连线颜色
+  scale_size_continuous(range = c(2,8)) + #点的大小范围设置
+  coord_cartesian(xlim=c(-1.5,1.5),ylim = c(-1.5,1.5))#设置坐标位置，防作图溢出
+p
+ggsave("TF靶基因.pdf", p, width=8, height=8)
