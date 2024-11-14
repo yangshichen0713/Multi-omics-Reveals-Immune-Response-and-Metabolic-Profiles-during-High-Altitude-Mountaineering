@@ -52,7 +52,28 @@ ids = c(mt,ncRNA,rp) %>% unique
 scRNA = scRNA[-which(rownames(scRNA) %in% ids),]
 scRNA
 
-#7、细胞注释
+#7、标准化和降维
+scRNA <- NormalizeData(scRNA,normalization.method = "LogNormalize", scale.factor = 10000)
+scRNA <- FindVariableFeatures(scRNA,selection.method = "vst",nfeatures = 2000)
+scRNA <- ScaleData(scRNA)
+scRNA <- RunPCA(scRNA,pc.genes = VariableFeatures(pbmc_1),verbose = T)
+DimHeatmap(scRNA, dims = 1:15, cells = 500, balanced = TRUE)
+ElbowPlot(scRNA,ndims = 50)
+pc.num = 1:20
+scRNA <- RunUMAP(scRNA, dims = pc.num, n.neighbors = 30L, min.dist = 0.3)
+
+#8、细胞聚类和差异分析
+scRNA <- FindNeighbors(scRNA, dims = pc.num)
+scRNA <- FindClusters(scRNA, resolution = 0.75)
+plot <-DimPlot(scRNA, reduction = "umap", label=T,raster=FALSE)
+
+#9、差异基因分析
+scRNA.markers <- FindAllMarkers(scRNA, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+top20.scRNA.markers <- scRNA.markers %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC)
+write.csv(scRNA.markers,"scRNA.allmarkers.csv")
+write.csv(top20.scRNA.markers,"scRNA.top20markers.csv")
+
+#10、细胞注释
 umap = scRNA@reductions$umap@cell.embeddings %>%  #坐标信息
   as.data.frame() %>% 
   cbind(cell_type = scRNA@active.ident) # 注释后的label信息,改为cell_type
