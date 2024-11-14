@@ -1,0 +1,381 @@
+library(Seurat)
+library(patchwork)
+library(dplyr)
+library(cowplot)
+library(tidyr)
+library(ggplot2)
+library(RColorBrewer)
+library(SeuratObject)
+library(reshape2)
+library(harmony)
+library(ggpubr)
+library(stringr)
+library(ggrepel) 
+library(pheatmap)
+
+##################################################################通路热图
+##读取数据
+setwd("/Users/mac/Desktop/dengshan/TNK_2/")
+celltype <- readRDS("CD8zhushi.rds")
+#celltype2 <- readRDS("NKzhushi.rds")
+#celltype3 <- merge(celltype1,celltype2)
+#celltype <- subset(celltype3,seurat_annotations %in% c("CD16+ NK","CD8+ TEM","Cytotoxic CD8+ T","γδT"))
+
+
+##通路打分
+setwd("/Users/mac/Desktop/dengshan/通路_热图/Geneset1/set2/")
+filename <- dir("/Users/mac/Desktop/dengshan/通路_热图/Geneset1/set2/")
+pathname <- gsub(".txt","",filename)
+pathlist <- list()
+for (i in 1:length(pathname)){
+  data <- read.table(filename[[i]],header = TRUE,sep = "")
+  pathlist[[i]] <- as.character(data[,1])
+}
+names(pathlist) <- pathname
+##AddModuleScore
+cell <- celltype
+for (i in 1:length(pathlist)){
+  cell <- AddModuleScore(
+    object = cell,
+    features = pathlist[i],
+    ctrl = 100,
+    name = names(pathlist[i])
+  )
+}
+
+##得到计算结果
+setwd("/Users/mac/Desktop/dengshan/通路_热图/test/CD8")
+file <- dir("/Users/mac/Desktop/dengshan/通路_热图/Geneset1/set2/")
+pathname <- gsub(".txt","",file)
+Idents(cell) <- cell$seurat_annotations
+for (b in names(table(cell@active.ident))){
+  object <- subset(cell,idents=b)
+  for (i in 1:length(pathname)){
+    f <- paste0(pathname[[i]],"1")
+    data <- as.data.frame(aggregate(object@meta.data[[f]], by=list(type=object$group),FUN=mean))
+    #data <- as.data.frame(aggregate(object@meta.data[[f]], by=list(type=object$seurat_annotations),FUN=mean))
+    data$celltype <- b
+    data$path <- pathname[[i]]
+    write.csv(data,paste0(pathname[[i]],"_",b,"_value.csv"))
+  }
+}
+
+filepath <- dir("/Users/mac/Desktop/dengshan/通路_热图/test/CD8")
+filename <- gsub(".csv","",filepath)
+deglist <- list()
+for (i in 1:length(filename)){
+  deglist[[i]] <- read.csv(paste0(filename[i],".csv"),header = TRUE)
+  row.names(deglist[[i]]) <- deglist[[i]]$X
+  deglist[[i]] <- deglist[[i]][,-1]
+}
+names(deglist) <- filename
+data <- dplyr::bind_rows(deglist)
+
+##只是为了创建一个dataframe
+data$group <- paste(data$type,data$celltype)
+data2 <- subset(data, data$group %in% "D01 CD8+ TCM")
+data2 <- as.data.frame(data2$x,data2$path)
+colnames(data2) <- "D01 CD8+ TCM"
+
+##作图data准备
+name <- names(table(data$group))
+for (i in name){
+  g <- subset(data, data$group %in% i)
+  data2[,paste0(i,"")] <- g$x
+}
+data2 <- select(data2,
+                1,10,19,28,37,
+                2,11,20,29,38,
+                3,12,21,30,39,
+                4,13,22,31,40,
+                5,14,23,32,41,
+                6,15,24,33,42,
+                7,16,25,34,43,
+                8,17,26,35,44,
+                9,18,27,36,45
+                )##按照目的改变列顺序
+setwd("/Users/mac/Desktop/dengshan/通路_热图")
+write.csv(data2,"test_CD8.csv")
+
+##计算p值
+setwd("/Users/mac/Desktop/dengshan/通路_热图/pvalue/NK")
+groups <-  list(c("D01","D04"), c("D01","D09"),c("D01","D11"),c("D01","D16"))
+for (j in 1:length(groups)){
+  object_sub <- subset(cell,group %in% groups[[j]])
+  for (b in names(table(object_sub$seurat_annotations))){
+    object_tmp <- subset(object_sub,idents=b)
+    for (i in 1:length(pathname)){
+      f <- paste0(pathname[[i]],"1")
+      data <- as.data.frame((pairwise.wilcox.test(object_tmp@meta.data[[f]],object_tmp$group,paired = F,
+                                                  p.adjust.method="BH")$p.value))
+      data$celltype <- b
+      data$path <- pathname[[i]]
+      data$type <- groups[[j]][2]
+      write.csv(data,paste0(pathname[[i]],"_",b,"_",j,"_pvalue.csv"))
+    }
+  }
+}
+
+filepath <- dir("/Users/mac/Desktop/dengshan/通路_热图/pvalue/NK")
+filename <- gsub(".csv","",filepath)
+deglist <- list()
+for (i in 1:length(filename)){
+  deglist[[i]] <- read.csv(paste0(filename[i],".csv"),header = TRUE)
+  row.names(deglist[[i]]) <- deglist[[i]]$X
+  deglist[[i]] <- deglist[[i]][,-1]
+}
+names(deglist) <- filename
+data <- dplyr::bind_rows(deglist)
+colnames(data)[1] <- "x"
+
+##只是为了创建一个dataframe
+data$group <- paste(data$type,data$celltype)
+data2 <- subset(data, data$group %in% "D04 Active CD16+ NK")
+data2 <- as.data.frame(data2$x,data2$path)
+colnames(data2) <- "D04 Active CD16+ NK"
+
+##作图data准备
+name <- names(table(data$group))
+for (i in name){
+  g <- subset(data, data$group %in% i)
+  data2[,paste0(i,"")] <- g$x
+}
+data2 <- select(data2,
+                1,6,11,16,
+                2,7,12,17,
+                3,8,13,18,
+                4,9,14,19,
+                5,10,15,20)##按照目的改变列顺序
+setwd("/Users/mac/Desktop/dengshan/通路_热图")
+write.csv(data2,"pvalue_NK.csv")
+
+##作图
+setwd('/Users/mac/Desktop/BGI/BGI项目/dengshan/通路_热图/')
+
+data <- as.matrix(t(read.table("value_row.txt",row.names = 1,header = T,sep = "\t",check.names = F)))
+pvalue <- as.matrix(t(read.table("value_p.txt",row.names = 1,header = T,sep = "\t",check.names = F)))
+
+p <- pheatmap(data,
+              # 去掉聚类树：
+              cluster_cols = F,
+              cluster_rows = F,
+              #breaks=seq(-1.5,1.5,length.out = 100),
+              # 加color bar：列注释信息；
+              #annotation_col = annotation_col,
+              # 行注释信息：
+              #annotation_row = annotation_row,
+              # color bar 颜色设定：
+              #annotation_colors = ann_colors,
+              display_numbers = ifelse(pvalue > 0.01 & pvalue < 0.05, "*", ifelse(pvalue > 0.001 & pvalue < 0.01, "**", (ifelse(pvalue < 0.001, "***", "")))),
+              number_color = "black",
+              #display_numbers = pvalue,
+              fontsize=7,
+              # 设置单元格颜色渐变；(5)表示分5段渐变；
+              #color = colorRampPalette(c("#2166AC","#4393C3","#92C5DE","#D1E5F0","#FDDBC7","#F4A582","#D6604D","#B2182B"))(100), 
+              color = colorRampPalette(c("#78BBE2","#D1E5F0","white","#F4A582","#D6604D"))(100), 
+              #color = colorRampPalette(c("#78BBE2","white","#DEA1A5"))(100), 
+              # 行、列标签的字体大小
+              fontsize_col = 8,
+              fontsize_row = 8,
+              # 是否显示行、列名
+              show_colnames = T,
+              # 设置每个单元格的宽度和高度
+              cellwidth = 12, 
+              cellheight = 12,
+              # 设置标题：
+              main = "Hypoxic",
+              # 设置标签是否显示
+              annotation_legend	= F,
+              scale="column",
+              border= F)
+p
+
+setwd('/Users/mac/Desktop/')
+ggsave("Hypoxic.pdf",p,width=10,height=3)
+
+##################################################################基因热图(多个基因)
+##读取数据
+setwd('/Users/mac/Desktop/dengshan/TNK_2/')
+celltype <- readRDS("CD8zhushi.rds")
+#celltype = subset(celltype,seurat_annotations == c("cDC2"))
+
+exprs <- data.frame(FetchData(object = celltype, vars = c('MYC')))
+exprs$Barcod<-rownames(exprs)
+ident<-data.frame()
+#barcode与聚类信息提取
+ident<-data.frame(Barcod=names(celltype$orig.ident),orig.ident=celltype$orig.ident,group=celltype$group,celltype=celltype$seurat_annotations) 
+#ident<-data.frame(Barcod=names(celltype$orig.ident),orig.ident=celltype$orig.ident,group=celltype$group) 
+#通过merge函数，将表达量与聚类号对应起来
+c<-merge(exprs,ident,by='Barcod')
+#对其进行排序
+c$orig.ident<-factor(c$orig.ident,levels=c(sort(unique(celltype$orig.ident))))
+c <- arrange(c,group)
+
+setwd('/Users/mac/Desktop/dengshan/通路_热图/gene/1119')
+summary <- c
+summary <- summary[,-c(1,3)]
+summary <- aggregate(summary[, c(1)], by = list(summary$group,summary$celltype), FUN = mean)
+#summary <- aggregate(summary[, c(1:196)], by = list(summary$group), FUN = mean)
+summary <- t(summary)
+write.csv(summary,"CD8.csv")
+
+##计算p值
+setwd("/Users/mac/Desktop/dengshan/通路_热图/gene/1119/pvalue/CD8")
+groups <-  list(c("D01","D04"), c("D01","D09"),c("D01","D11"),c("D01","D16"))
+genename <- c("MYC")
+for (j in 1:length(groups)){
+  object_sub <- subset(celltype,group %in% groups[[j]])
+  for (b in names(table(object_sub@active.ident))){
+    object_tmp <- subset(object_sub,idents=b)
+    for (i in 1:length(genename)){
+      f <- paste0(genename[[i]])
+      exprs <- data.frame(FetchData(object = object_tmp, vars = c("MYC"),))
+      data <- as.data.frame((wilcox.test(exprs[[f]]~object_tmp$group,paired = F))$p.value)
+      data$celltype <- b
+      data$path <- genename[[i]]
+      data$type <- groups[[j]][2]
+      write.csv(data,paste0(genename[[i]],"_",b,"_",j,"_pvalue.csv"))
+    }
+  }
+}
+
+filepath <- dir("/Users/mac/Desktop/dengshan/通路_热图/gene/1119/pvalue/CD8")
+filename <- gsub(".csv","",filepath)
+deglist <- list()
+for (i in 1:length(filename)){
+  deglist[[i]] <- read.csv(paste0(filename[i],".csv"),header = TRUE)
+  row.names(deglist[[i]]) <- deglist[[i]]$X
+  deglist[[i]] <- deglist[[i]][,-1]
+}
+names(deglist) <- filename
+data <- dplyr::bind_rows(deglist)
+colnames(data)[1] <- "x"
+
+##只是为了创建一个dataframe
+data$group <- paste(data$type,data$celltype)
+data2 <- subset(data, data$group %in% "D04 CD8+ TCM")
+data2 <- as.data.frame(data2$x,data2$path)
+colnames(data2) <- "D04 CD8+ TCM"
+
+##作图data准备
+name <- names(table(data$group))
+for (i in name){
+  g <- subset(data, data$group %in% i)
+  data2[,paste0(i,"")] <- g$x
+}
+data2 <- select(data2,
+                1,10,19,28,
+                2,11,20,29,
+                3,12,21,30,
+                4,13,22,31,
+                5,14,23,32,
+                6,15,24,33,
+                7,16,25,34,
+                8,17,26,35,
+                9,18,27,36)##按照目的改变列顺序
+setwd("/Users/mac/Desktop/dengshan/通路_热图/gene/1119/")
+write.csv(data2,"pvalue_CD8.csv")
+
+
+##作图
+setwd('/Users/mac/Desktop/dengshan/通路_热图/gene')
+data <- as.matrix(t(read.csv("HALLMARK_MTORC1_SIGNALING_Mono.csv",row.names = 1,header = T,check.names = F)))
+data <- data[,1:25]
+
+#setwd('/Users/mac/Desktop/dengshan/通路_热图/')
+
+#data <- as.matrix(t(read.table("value_row.txt",row.names = 1,header = T,sep = "\t",check.names = F)))
+#pvalue <- as.matrix(t(read.table("value_p.txt",row.names = 1,header = T,sep = "\t",check.names = F)))
+
+p <- pheatmap(data,
+              # 去掉聚类树：
+              cluster_cols = T,
+              cluster_rows = F,
+              breaks=seq(-1.5,1.5,length.out = 100),
+              #display_numbers = ifelse(pvalue > 0.01 & pvalue < 0.05, "*", ifelse(pvalue > 0.001 & pvalue < 0.01, "**", (ifelse(pvalue < 0.001, "***", "")))),
+              number_color = "black",
+              #display_numbers = pvalue,
+              fontsize=7,
+              # 设置单元格颜色渐变；(5)表示分5段渐变；
+              #color = colorRampPalette(c("#2166AC","#4393C3","#92C5DE","#D1E5F0","#FDDBC7","#F4A582","#D6604D","#B2182B"))(100), 
+              #color = colorRampPalette(c("#78BBE2","#D1E5F0","white","#F4A582","#D6604D"))(100), 
+              color = colorRampPalette(c("#78BBE2","white","#DEA1A5"))(100), 
+              # 行、列标签的字体大小
+              fontsize_col = 8,
+              fontsize_row = 8,
+              # 是否显示行、列名
+              show_colnames = T,
+              # 设置每个单元格的宽度和高度
+              cellwidth = 12, 
+              cellheight = 12,
+              # 设置标题：
+              main = "HALLMARK_MTORC1_SIGNALING_Mono",
+              # 设置标签是否显示
+              annotation_legend	= F,
+              scale="column",
+              border=F)
+p
+
+setwd('/Users/mac/Desktop/')
+ggsave("HALLMARK_MTORC1_SIGNALING_Mono.pdf",p,width=6,height=5)
+
+##################################################################基因热图(一个基因多种细胞类型)
+##读取数据
+setwd('/Users/mac/Desktop/BGI/BGI项目/dengshan/NK/')
+NK <- readRDS("NKzhushi.rds")
+
+
+for (i in 1:length(celllist)) {
+  celltype = celllist[[i]]
+  exprs <- data.frame(FetchData(object = celltype, vars = c('PRKAA2')))
+  exprs$Barcod<-rownames(exprs)
+  ident<-data.frame()
+  #barcode与聚类信息提取
+  ident<-data.frame(Barcod=names(celltype$orig.ident),orig.ident=celltype$orig.ident,group=celltype$group)
+  #通过merge函数，将表达量与聚类号对应起来
+  c<-merge(exprs,ident,by='Barcod')
+  #对其进行排序
+  c$orig.ident<-factor(c$orig.ident,levels=c(sort(unique(celltype$orig.ident))))
+  summary <- aggregate(c[, 4], by = list(c$group), FUN = mean)
+  summary <- t(summary)
+  setwd('/Users/mac/Desktop/dengshan/通路_热图/gene/HIF3A/NK')
+  write.csv(summary,paste0(namelist[[i]],".csv"))
+}
+
+##作图
+setwd('/Users/mac/Desktop/dengshan/通路_热图/gene')
+
+data <- as.matrix(read.table("all.txt",row.names = 1,header = T,sep = "\t"))
+
+library(pheatmap)
+p <- pheatmap(data,
+              # 去掉聚类树：
+              cluster_cols = F,
+              cluster_rows = F,
+              # 加color bar：列注释信息；
+              annotation_col = annotation_col,
+              # 行注释信息：
+              annotation_row = annotation_row,
+              # color bar 颜色设定：
+              annotation_colors = ann_colors,
+              # 设置单元格颜色渐变；(5)表示分5段渐变；
+              color = colorRampPalette(c("#2166AC","#4393C3","#92C5DE","#D1E5F0","#FDDBC7","#F4A582","#D6604D","#B2182B"))(100), 
+              # 行、列标签的字体大小
+              fontsize_col = 5,
+              fontsize_row = 8,
+              # 是否显示行、列名
+              show_colnames = F,
+              # 设置每个单元格的宽度和高度
+              cellwidth = 20, 
+              cellheight = 12,
+              display_numbers = F ,number_color = "black",
+              # 设置标题：
+              main = "HIF3A",
+              # 设置标签是否显示
+              annotation_legend	= F,
+              scale= "row",
+              border=F)
+p
+
+setwd('/Users/mac/Desktop/dengshan/通路_热图/result/基因/')
+ggsave("HIF3A_Mono.pdf",p,width=5,height=5)
