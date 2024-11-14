@@ -1,0 +1,345 @@
+library(Seurat)
+library(patchwork)
+library(dplyr)
+library(cowplot)
+library(tidyr)
+library(ggplot2)
+library(RColorBrewer)
+library(SeuratObject)
+library(reshape2)
+library(harmony)
+library(ggpubr)
+library(stringr)
+library(ggrepel) 
+library(tidyverse)
+
+###############################################小提琴图
+setwd('/Users/mac/Desktop/dengshan/生理数据/')
+data <- as.data.frame(read.table("all.txt",header = T,sep = "\t"))
+data$group <- factor(data$group,levels = c("D1","D16"))
+#data$AMS <- data$people
+#data$AMS[data$AMS %in% c("V1","V2","V3","V5","V6","V9","V10")] <- 'AMS'
+#data$AMS[data$AMS %in% c("V4","V7","V8","V11")] <- 'non-AMS'
+data$people <- factor(data$people,levels=c('V1','V2','V3','V4','V5','V6','V7','V8','V9','V10','V11'))
+setwd('/Users/mac/Desktop/dengshan/生理数据/figure2/')
+p1 <- ggplot(data, aes(group,EO.))+theme_bw()+RotatedAxis()+
+  geom_violin(color= c('grey40'),
+              fill= c('grey50'),alpha=0.1,size=0.5)+
+  geom_point(aes(color = factor(people)),size =1.2 ,alpha= 1)+
+  geom_line(aes(group=people, color= factor(people)),#linetype = factor(AMS)
+            linewidth = 0.45)+
+  scale_color_manual(values = c('#9ED2C8', '#E4C755','#C1B8D7', '#EB8878','#8BB1D1', 
+                                '#E39A35', '#B8D976','#EECCE1', '#9FA3A8','#BD956A', '#3A6963'))+
+  stat_compare_means(comparisons = list(c("D1","D16")),
+                     method="wilcox.test", #(t.test or wilcox.test)
+                     paired = T,
+                     size=2.5,
+                     symnum.args = list(cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                                        symbols = c("***", "**", "*", "ns")))+
+  labs(title = "EO％")+
+  theme(plot.title = element_text(size=8,hjust=0.5),legend.position="none")+
+  xlab("")+ylab("EO％")+
+  theme_classic()
+p1
+ggsave("EO.pdf", p1, width=4,height=4)
+
+###############################################箱线图
+setwd('/Users/mac/Desktop/dengshan/生理数据/')
+data <- as.data.frame(read.table("all.txt",header = T,sep = "\t"))
+data$people <- factor(data$people,levels=c('V1','V2','V3','V4','V5','V6','V7','V8','V9','V10','V11'))
+#data$Mountain <- data$people
+#data$people <- as.factor(data$people )
+#data$Mountain[data$Mountain %in% c('2',"3","9","11")] <- "Mountain"
+#data$Mountain[data$Mountain %in% c("1","4","5","6","7","8","10")] <- "Non-Mountain"
+
+setwd('/Users/mac/Desktop/')
+
+g <- ggplot(data = data,aes(group,SpO2))+ 
+  geom_boxplot(aes(fill = SpO2),alpha=0.5,size=0.25,width = 0.75)+
+  scale_fill_manual(values = c("#78BBE2","#F4A582"))+
+  stat_compare_means(comparisons = list(c("D3_E","D11_E")),
+                     method="wilcox.test", #(t.test or wilcox.test)
+                     paired = F,
+                     size=2,
+                     symnum.args = list(cutpoints = c(0,0.001, 0.01, 0.05, 1),
+                                        symbols = c("***", "**", "*", "ns")))+
+  geom_jitter(aes(color = people),size =1.2 ,alpha= 1)+
+  scale_fill_manual(values = c( '#9ED2C8', '#E4C755','#C1B8D7', '#EB8878','#8BB1D1', 
+                                '#E39A35', '#B8D976','#EECCE1', '#9FA3A8','#BD956A', '#3A6963'))+
+  labs(title = paste0("HR_D9_M"))+ 
+  theme_classic()+
+  theme(panel.background=element_rect(fill="white",colour="black",size=0.25), # 填充框内主题颜色，边框颜色和边框线条粗细
+        axis.line=element_line(colour="black",size=0.5), # x,y轴颜色，粗细
+        axis.title=element_text(size=6,color="black"), # x,y轴名设置
+        axis.text = element_text(size=6,color="black"), # x,y轴文本设置
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position="right")+border("black")#加边框
+g
+ggsave("HR_D9_M.pdf", g, width=3.3,height=3)
+
+###############################################热图
+library(pheatmap)
+setwd('/Users/mac/Desktop/dengshan/生理数据/')
+data <- as.data.frame(read.table("all.txt",header = T,row.names = 1,sep = "\t"))
+setwd('/Users/mac/Desktop/dengshan/生理数据/figure/')
+# 构建列注释信息
+annotation_col = data.frame(Group = factor(c("g1","g2","g3","g4","g5")))
+
+rownames(annotation_col) <- colnames(data)
+head(annotation_col)
+
+# 构建行注释信息
+annotation_row = data.frame(people = factor(c("1","2","3","4","5","6","7","8","9","10","11")))
+rownames(annotation_row) = rownames(data)
+head(annotation_row)
+
+
+# 自定注释信息的颜色列表
+ann_colors = list(
+  Group = c('g1' = "#d3d1e3", 'g2' = "#b3b1d0", "g3" = "#9490bd", "g4" = "#7470a9",
+            "g5" = "#5c5794"),
+  people = c("1"="white","2"="white","3"="white","4"="white","5"="white","6"="white","7"="white",
+               "8"="white","9"="white","10"="white","11"="white"))
+head(ann_colors)
+
+p <- pheatmap(data,
+              # 去掉聚类树：
+              cluster_cols = F,
+              cluster_rows = F,
+              # 加color bar：列注释信息；
+              annotation_col = annotation_col,
+              # 行注释信息：
+              annotation_row = annotation_row,
+              # color bar 颜色设定：
+              annotation_colors = ann_colors,
+              # 设置单元格颜色渐变；(5)表示分5段渐变；
+              color = colorRampPalette(c("#FDDBC7","#F4A582","#D6604D","#B2182B"))(4), 
+              #breaks=seq(0,9,length.out = 4),
+              breaks=c(0,2,6,9),
+              # 行、列标签的字体大小
+              fontsize_col = 5,
+              fontsize_row = 8,
+              # 是否显示行、列名
+              show_colnames = F,
+              # 设置每个单元格的宽度和高度
+              cellwidth = 20, 
+              cellheight = 12,
+              display_numbers = F ,number_color = "black",
+              # 设置标题：
+              main = "AMS",
+              na_value = "✗",
+              # 设置标签是否显示
+              annotation_legend	= F)
+p
+ggsave("AMS2.pdf",p,width=5,height=5)
+
+
+##############################################################相关性气泡图
+library(Hmisc)
+library(dplyr)
+
+setwd("/Users/mac/Desktop/dengshan/生理数据/相关性")
+
+tmp <- as.matrix(read.table("all.txt", sep="\t", header=T,row.names = 1, check.names=FALSE))
+rownames(tmp) <- paste0(1:11)
+
+# 计算相关性和显著性p值矩阵：
+cor_res <- rcorr(tmp, type= "spearman")
+
+cor_mat <- cor_res$r
+p_mat <- cor_res$P
+
+# 数据转换：
+cor_mat_long <- cor_mat %>% 
+  as.data.frame() %>% 
+  mutate(x = factor(rownames(cor_mat), levels = colnames(cor_mat))) %>% 
+  pivot_longer(cols = !x, names_to = "y", values_to = "cor") %>% 
+  mutate(y = factor(y, levels = rev(colnames(cor_mat))))
+
+head(cor_mat_long)
+
+ggplot() +
+  # 气泡图
+  geom_point(data = cor_mat_long, aes(x, y, size = cor, fill = cor), 
+             shape = 21, color = "#c4bcba")+
+  # 配色
+  scale_fill_gradient2(low = "blue", mid = "#ffffff", high = "red")+
+  # x轴和y轴扩展
+  scale_x_discrete(expand = c(0.025, 0.025))+
+  scale_y_discrete(expand = c(0.025, 0.025))+
+  labs(x="Metabolites",y="Metabolites",title="Correlation")+
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, hjust = 1))+
+  # 框线
+  geom_vline(aes(xintercept =seq(0.5, 11.5, 1)), color = "#bbbbbb")+
+  geom_hline(aes(yintercept=seq(0.5, 11.5, 1)), color = "#bbbbbb")+
+  # 主题
+  theme(panel.grid = element_blank())
+
+#ggsave("p1.pdf", height = 10, width = 10)
+
+# 取相关性矩阵上三角：
+cor_mat_up <- cor_mat
+cor_mat_up[lower.tri(cor_mat_up, diag = T)] <- NA
+
+cor_mat_up_long <- cor_mat_up %>% 
+  as.data.frame() %>% 
+  mutate(x = factor(rownames(cor_mat_up), levels = rev(colnames(cor_mat)))) %>% 
+  pivot_longer(cols = !x, names_to = "y", values_to = "cor") %>% 
+  mutate(y = factor(y, levels = colnames(cor_mat)))
+
+ggplot() +
+  # 气泡图：
+  geom_point(data = cor_mat_up_long, aes(x, y, size = cor, fill = cor), 
+             shape = 21, color = "#c4bcba")+
+  # 配色
+  scale_fill_gradient2(low = "blue", mid = "#ffffff", high = "red")+
+  # x轴和y轴扩展
+  scale_x_discrete(expand = c(0.025, 0.025))+
+  scale_y_discrete(expand = c(0.025, 0.025))+
+  labs(x="Metabolites",y="Metabolites",title="Correlation")+
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, hjust = 1))+
+  # 框线
+  geom_vline(aes(xintercept =seq(0.5, 11.5, 1)), color = "#bbbbbb")+
+  geom_hline(aes(yintercept=seq(0.5, 11.5, 1)), color = "#bbbbbb")+
+  # 主题
+  theme(panel.grid = element_blank())
+
+#ggsave("p2.pdf", height = 10, width = 10)
+
+# 取p值矩阵下三角：
+p_mat_lower <- p_mat
+p_mat_lower[!lower.tri(p_mat_lower, diag = F)] <- 1
+
+p_mat_lower_long <- p_mat_lower %>% 
+  as.data.frame() %>% 
+  mutate(x = factor(rownames(p_mat_lower), levels = rev(colnames(cor_mat)))) %>% 
+  pivot_longer(cols = !x, names_to = "y", values_to = "p") %>% 
+  mutate(y = factor(y, levels = colnames(cor_mat)))
+
+# 显著性标记：
+p_mat_lower_long$p_sig <- as.character(symnum(p_mat_lower_long$p, 
+                                              cutpoints = c(0, 0.001, 0.01, 0.05, 1), 
+                                              symbols = c("***", "**", "*", "")))
+ggplot() +
+  # 气泡图：
+  geom_point(data = p_mat_lower_long, 
+             aes(x, y, color = -log10(p)),
+             size = 10,
+             shape = 15)+
+  geom_text(data = p_mat_lower_long, 
+            aes(x, y, label = p_sig),size=2)+
+  # 配色：
+  scale_color_gradientn(colours = c("#ffffff", "#71bc68", "#c3972e", "#fb7f00"))+
+  # x轴和y轴扩展
+  scale_x_discrete(expand = c(0.025, 0.025))+
+  scale_y_discrete(expand = c(0.025, 0.025))+
+  labs(x="Metabolites",y="Metabolites",title="Correlation")+
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 90, hjust = 1))+
+  # 框线
+  geom_vline(aes(xintercept =seq(0.5, 11.5, 1)), color = "#bbbbbb")+
+  geom_hline(aes(yintercept=seq(0.5, 11.5, 1)), color = "#bbbbbb")+
+  # 主题
+  theme(panel.grid = element_blank())
+
+#ggsave("p3.pdf", height = 15, width = 15)
+
+#合并
+ggplot() +
+  # p值矩阵：
+  geom_point(data = p_mat_lower_long, 
+             aes(x, y, color = -log10(p)),
+             size = 15,
+             shape = 15)+
+  geom_text(data = p_mat_lower_long, 
+            aes(x, y, label = p_sig),size=5)+
+  # 配色：
+  scale_color_gradientn(colours = c("#ffffff", "#71bc68", "#c3972e", "#fb7f00"))+
+  # 气泡图：
+  geom_point(data = cor_mat_up_long, aes(x, y, size = cor, fill = cor), 
+             shape = 21, color = "#c4bcba")+
+  # 配色：
+  scale_fill_gradient2(low = "blue", mid = "#ffffff", high = "red")+
+  # x轴和y轴扩展
+  scale_x_discrete(expand = c(0.05, 0.05))+
+  scale_y_discrete(expand = c(0.05, 0.05), position = "right")+
+  # 框线
+  geom_vline(aes(xintercept =seq(0.5, 11.5, 1)), color = "#bbbbbb")+
+  geom_hline(aes(yintercept=seq(0.5, 11.5, 1)), color = "#bbbbbb")+
+  # 主题：
+  xlab("")+
+  ylab("")+
+  theme(panel.grid = element_blank(), 
+        axis.text.x = element_text(angle = 90),
+        legend.position = "right")+
+  guides(fill = guide_colorbar("Correlation", title.position = "top",
+                               title.theme = element_text(face = "bold")),
+         color = guide_colorbar("-log10(Pvalue)", title.position = "top",
+                                title.theme = element_text(face = "bold")),
+         size = "none")+
+  theme(axis.text.x = element_text(size = 12))+
+  theme(axis.text.y = element_text(size = 12))
+
+ggsave("plot.pdf", height = 6, width = 8)
+
+##############################################################相关性散点图
+library(ggplot2)
+library(ggpubr)
+
+setwd("/Users/mac/Desktop/dengshan/生理数据/相关性")
+tmp <- as.data.frame(read.table("all.txt", sep="\t", header=T,row.names = 1, check.names=FALSE))
+
+p <- ggplot(data=tmp, aes(x=Gender, y=AMS_g1))+geom_point(color="red")+
+  stat_smooth(method="lm",se=T)+stat_cor(data=tmp, method = "spearman")+theme_classic()
+p
+ggsave("Gender-AMS_g1.pdf", height = 5, width = 5)
+
+##############################################################双y轴图
+library(ggplot2)
+library(ggpubr)
+library(tidyverse)
+library(readr)
+
+setwd("/Users/mac/Desktop/dengshan/生理数据")
+
+tmp1 <- as.data.frame(read.table("all1.txt", sep="\t", header=T, check.names=FALSE))
+tmp1$time <- factor(tmp1$time,levels = c("D2_M","D2_E","D3_M","D3_E","D4_M","D4_E","D5_M","D5_E","D6_M",
+                                         "D7_E","D8_M","D8_E","D9_M","D11_E","D12_E","D13_M","D13_E",
+                                         "D14_M","D14_E"))
+p1 <- ggplot(tmp1,aes(x=time, y=SpO2))+
+  geom_line(size=0.75,group=1,color="#2166AC",linetype=1) +
+  geom_point(size=2.5,shape=21,fill="#92C5DE",color="#2166AC")+
+  geom_errorbar(aes(ymin=SpO2-SpO2_se, ymax=SpO2+SpO2_se),colour="#4393C3", width=0.2,size=0.25)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
+
+p1
+ggsave("/Users/mac/Desktop/spo2.pdf",p1, height = 3, width = 5)
+
+tmp2 <- as.data.frame(read.table("all2.txt", sep="\t", header=T, check.names=FALSE))
+tmp2$time <- factor(tmp2$time,levels = c("D2_M","D2_E","D3_M","D3_E","D4_M","D4_E","D5_M","D5_E","D6_M",
+                                       "D7_E","D8_M","D8_E","D9_M","D11_E","D12_E","D13_M","D13_E",
+                                       "D14_M","D14_E"))
+p2 <- ggplot(tmp2,aes(x=time, y=HR))+
+  geom_line(size=0.75,group=1,color="#D6604D") +
+  geom_point(size=2.5,shape=21,fill="#F4A582",color="#D6604D")+
+  geom_errorbar(aes(ymin=HR-HR_se, ymax=HR+HR_se),colour="#FDDBC7", width=0.2,size=0.25)+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
+p2
+ggsave("/Users/mac/Desktop/hr.pdf",p2, height = 3, width = 5)
+
+tmp3 <- as.data.frame(read.table("all.txt", sep="\t", header=T, check.names=FALSE))
+tmp3$time <- factor(tmp3$time,levels = c("D2_M","D2_E","D3_M","D3_E","D4_M","D4_E","D5_M","D5_E","D6_M",
+                                         "D7_E","D8_M","D8_E","D9_M","D11_E","D12_E","D13_M","D13_E",
+                                         "D14_M","D14_E"))
+p3 <- ggplot(tmp3,aes(x=time, y=Altitude))+
+  geom_line(size=0.5,group=1,color="black",linetype=2) +
+  geom_point(size=1,color="black")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
+p3
+ggsave("/Users/mac/Desktop/altitude.pdf",p3, height = 3, width = 5)
+
